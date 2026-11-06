@@ -127,10 +127,10 @@ export function QuotaTimeline({
     [laneInputs, mode, span.days]
   );
 
-  /** Weekly: one cell per day. Session: one per 6 hours. */
+  /** Weekly: one cell per day. Session: one per 2 hours across the single day. */
   const cells = useMemo(() => {
     const zoomed = mode === 'session';
-    const count = zoomed ? span.days * 4 : span.days;
+    const count = zoomed ? span.days * 12 : span.days;
     const cellMs = (span.endMs - span.startMs) / count;
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
@@ -167,11 +167,13 @@ export function QuotaTimeline({
             {t('quota_management.windows_title', { defaultValue: 'Quota windows' })}
           </h2>
           <p className={styles.range}>
-            {formatDay(span.startMs)} – {formatDay(span.endMs - DAY_MS)}
+            {span.days === 1
+              ? formatDay(span.startMs)
+              : `${formatDay(span.startMs)} – ${formatDay(span.endMs - DAY_MS)}`}
             {' · '}
             {mode === 'weekly'
               ? t('quota_management.windows_span_weekly', { defaultValue: 'two weeks' })
-              : t('quota_management.windows_span_session', { defaultValue: 'three days' })}
+              : t('quota_management.windows_span_session', { defaultValue: 'one day' })}
             {offset === 0 &&
               ` · ${t('quota_management.windows_current', { defaultValue: 'current' })}`}
           </p>
@@ -357,8 +359,7 @@ function Lane({ lane, span, now, mode, cells, nowPercent, resolvedTheme }: LaneP
         <div className={styles.laneLimits}>
           {lane.limits.map((limit) => (
             <span key={limit.label} className={styles.laneLimit}>
-              {lane.provider === 'meta' ? t(limit.label) : limit.label}{' '}
-              <b>{limit.remaining}%</b>
+              {lane.provider === 'meta' ? t(limit.label) : limit.label} <b>{limit.remaining}%</b>
             </span>
           ))}
         </div>

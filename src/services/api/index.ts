@@ -15,3 +15,7 @@ export * from './metaQuota';
 export * from './plugins';
 export * from './transformers';
 export * from './vertex';
+export * from './routing';
+export * from './usage';
+export * from './quotaSnapshots';
+export * from './quotaBurst';

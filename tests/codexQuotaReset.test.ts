@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { TFunction } from 'i18next';
 import { CODEX_CONFIG } from '@/features/quota/providers/codex/data';
-import { apiCallApi, authFilesApi, apiClient } from '@/services/api';
+import {
+  apiCallApi,
+  authFilesApi,
+  apiClient,
+  normalizeSnapshot,
+  quotaSnapshotsApi,
+} from '@/services/api';
 import { CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL } from '@/utils/quota';
 
 const t = ((key: string) => key) as TFunction;
@@ -25,26 +31,43 @@ function setup(body: unknown, statusCode = 200) {
       calls.push('consume');
       return response(body, statusCode);
     }
-    calls.push('read');
+    // Quota reads go through the proxy, never a direct api-call.
+    calls.push(`unexpected ${payload.url}`);
     return response({});
   });
   const clear = spyOn(authFilesApi, 'resetCooldown').mockImplementation(async () => {
     calls.push('clear');
     return { status: 'ok', auth_index: 'test-index', models: [] };
   });
-  mocks.push(request, clear);
-  return { calls, request, clear };
+  const refresh = spyOn(quotaSnapshotsApi, 'refresh').mockImplementation(
+    async (indexes, options) => {
+      calls.push(`read${options?.force ? ' (force)' : ''}`);
+      return {
+        pollIntervalSeconds: 3600,
+        snapshots: {
+          [indexes?.[0] ?? '']: normalizeSnapshot({
+            auth_index: indexes?.[0],
+            fetched_at: '2026-10-26T10:00:00Z',
+            responses: { usage: { status_code: 200, body: { rate_limit: null } } },
+          }),
+        },
+      };
+    }
+  );
+  mocks.push(request, clear, refresh);
+  return { calls, request, clear, refresh };
 }
 
 describe('Codex reset gateway cooldown', () => {
   test.each(['reset', 'already_redeemed'])(
-    'clears only after confirmed %s, before reads',
+    'clears only after confirmed %s, before a forced proxy refresh',
     async (code) => {
-      const { calls, clear } = setup({ code, windows_reset: 0 });
+      const { calls, clear, refresh } = setup({ code, windows_reset: 0 });
       await reset();
-      expect(calls.slice(0, 3)).toEqual(['consume', 'clear', 'read']);
+      expect(calls).toEqual(['consume', 'clear', 'read (force)']);
       expect(clear).toHaveBeenCalledTimes(1);
       expect(clear).toHaveBeenCalledWith('test-index');
+      expect(refresh).toHaveBeenCalledWith(['test-index'], { force: true });
     }
   );
 

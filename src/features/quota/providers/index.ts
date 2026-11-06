@@ -8,6 +8,7 @@
 import type { ComponentType } from 'react';
 import type { TFunction } from 'i18next';
 import { useQuotaStore } from '@/stores';
+import type { QuotaSnapshot } from '@/services/api/quotaSnapshots';
 import type { AuthFileItem } from '@/types';
 import type { QuotaBodyProps } from '../types';
 import type { QuotaProviderType, QuotaStore } from './types';
@@ -31,6 +32,12 @@ export interface QuotaCardState {
   status: 'idle' | 'loading' | 'success' | 'error';
   error?: string;
   errorStatus?: number;
+  /**
+   * When an explicit upstream fetch produced this success state. Lets the page
+   * tell whether it is newer than the proxy's passive observation — usage made
+   * outside the proxy (claude.ai, ChatGPT) or a manual reset only shows up here.
+   */
+  fetchedAtMs?: number;
 }
 
 export interface QuotaAdapter {
@@ -38,6 +45,7 @@ export interface QuotaAdapter {
   i18nPrefix: string;
   filterFn: (file: AuthFileItem) => boolean;
   fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
+  fromSnapshot?: (snapshot: QuotaSnapshot, file: AuthFileItem, t: TFunction) => unknown;
   enrichQuota?: (file: AuthFileItem, data: unknown, t: TFunction) => Promise<unknown>;
   resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
   canResetQuota?: (quota: QuotaCardState) => boolean;
@@ -49,17 +57,32 @@ export interface QuotaAdapter {
   Body: ComponentType<QuotaBodyProps<QuotaCardState>>;
 }
 
+/**
+ * Every success state built from fresh upstream data carries its fetch
+ * instant. States built from a proxy snapshot keep the proxy's own fetch time.
+ */
+const stampFetched = (adapter: QuotaAdapter): QuotaAdapter => {
+  const build = adapter.buildSuccessState;
+  return {
+    ...adapter,
+    buildSuccessState: (data) => {
+      const state = build(data);
+      return { ...state, fetchedAtMs: state.fetchedAtMs ?? Date.now() };
+    },
+  };
+};
+
 export const QUOTA_ADAPTERS: Record<QuotaProviderType, QuotaAdapter> = {
-  antigravity: {
+  antigravity: stampFetched({
     ...ANTIGRAVITY_CONFIG,
     Body: AntigravityQuotaBody,
-  } as unknown as QuotaAdapter,
-  claude: { ...CLAUDE_CONFIG, Body: ClaudeQuotaBody } as unknown as QuotaAdapter,
-  codex: { ...CODEX_CONFIG, Body: CodexQuotaBody } as unknown as QuotaAdapter,
-  devin: { ...DEVIN_CONFIG, Body: DevinQuotaBody } as unknown as QuotaAdapter,
-  kimi: { ...KIMI_CONFIG, Body: KimiQuotaBody } as unknown as QuotaAdapter,
-  meta: { ...META_CONFIG, Body: MetaQuotaBody } as unknown as QuotaAdapter,
-  xai: { ...XAI_CONFIG, Body: XaiQuotaBody } as unknown as QuotaAdapter,
+  } as unknown as QuotaAdapter),
+  claude: stampFetched({ ...CLAUDE_CONFIG, Body: ClaudeQuotaBody } as unknown as QuotaAdapter),
+  codex: stampFetched({ ...CODEX_CONFIG, Body: CodexQuotaBody } as unknown as QuotaAdapter),
+  devin: stampFetched({ ...DEVIN_CONFIG, Body: DevinQuotaBody } as unknown as QuotaAdapter),
+  kimi: stampFetched({ ...KIMI_CONFIG, Body: KimiQuotaBody } as unknown as QuotaAdapter),
+  meta: stampFetched({ ...META_CONFIG, Body: MetaQuotaBody } as unknown as QuotaAdapter),
+  xai: stampFetched({ ...XAI_CONFIG, Body: XaiQuotaBody } as unknown as QuotaAdapter),
 };
 
 export type QuotaMapUpdater = (

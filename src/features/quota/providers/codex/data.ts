@@ -14,14 +14,16 @@ import type {
   CodexQuotaWindow,
   CodexUsagePayload,
 } from '@/types';
-import { apiCallApi, authFilesApi, getApiCallErrorMessage } from '@/services/api';
+import {
+  apiCallApi,
+  authFilesApi,
+  getApiCallErrorMessage,
+  type QuotaSnapshot,
+} from '@/services/api';
 import { guardConfigConnection } from '@/services/api/configValue';
 import { isRecord } from '@/utils/helpers';
 import {
-  CODEX_RATE_LIMIT_RESET_CREDITS_URL,
   CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
-  CODEX_SUBSCRIPTION_URL,
-  CODEX_USAGE_URL,
   CODEX_REQUEST_HEADERS,
   normalizeNumberValue,
   normalizePlanType,
@@ -40,9 +42,13 @@ import {
   isDisabledAuthFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
+import {
+  isOkResponse,
+  refreshSnapshotFor,
+  requireSnapshotUsage,
+  snapshotResponseError,
+} from '../../snapshotBundle';
 import type { QuotaProviderData } from '../types';
-
-const CODEX_OPTIONAL_REQUEST_TIMEOUT_MS = 8000;
 
 type CodexResetCreditsData = {
   availableCount: number | null;
@@ -61,11 +67,15 @@ export type CodexQuotaData = {
   rateLimitResetCredits: CodexRateLimitResetCredit[];
   rateLimitResetCreditsError: string;
   windows: CodexQuotaWindow[];
+  /** The proxy's fetch time for the snapshot this was built from. */
+  fetchedAtMs?: number;
 };
 
 export const buildCodexQuotaWindows = (
   payload: CodexUsagePayload,
-  t: TFunction
+  t: TFunction,
+  /** When the payload was fetched: `reset_after_seconds` counts from here. */
+  fetchedAtMs: number = Date.now()
 ): CodexQuotaWindow[] => {
   const FIVE_HOUR_SECONDS = 18000;
   const WEEK_SECONDS = 604800;
@@ -112,7 +122,7 @@ export const buildCodexQuotaWindows = (
     // Keep the raw instant beside the label — see utils/quota/resetInstants.
     const resetAtMs =
       resolveResetMs([window.reset_at, window.resetAt]) ??
-      parseOffsetSecondsToMs(window.reset_after_seconds ?? window.resetAfterSeconds, Date.now());
+      parseOffsetSecondsToMs(window.reset_after_seconds ?? window.resetAfterSeconds, fetchedAtMs);
     const periodHours = periodHoursFromSeconds(
       window.limit_window_seconds ?? window.limitWindowSeconds
     );
@@ -335,122 +345,56 @@ const parseCodexSubscriptionActiveUntil = (payload: unknown): string | number | 
   return stringValue && stringValue !== '0' ? stringValue : null;
 };
 
-const fetchCodexSubscriptionActiveUntil = async (
-  authIndex: string,
-  accountId: string | null,
-  requestHeader: Record<string, string>
-): Promise<string | number | null> => {
-  if (!accountId) return null;
-
-  try {
-    const result = await apiCallApi.request(
-      {
-        authIndex,
-        method: 'GET',
-        url: `${CODEX_SUBSCRIPTION_URL}?account_id=${encodeURIComponent(accountId)}`,
-        header: requestHeader,
-      },
-      { timeout: CODEX_OPTIONAL_REQUEST_TIMEOUT_MS }
-    );
-    if (result.statusCode < 200 || result.statusCode >= 300) return null;
-    return parseCodexSubscriptionActiveUntil(result.body ?? result.bodyText);
-  } catch {
-    return null;
-  }
+const NO_RESET_CREDITS: CodexResetCreditsData = {
+  availableCount: null,
+  applicableAvailableCount: null,
+  credits: [],
+  error: '',
 };
 
-const fetchCodexResetCredits = async (
-  authIndex: string,
-  requestHeader: Record<string, string>,
+/** The proxy's `reset_credits` response; never fails the snapshot. */
+const readCodexResetCredits = (snapshot: QuotaSnapshot, t: TFunction): CodexResetCreditsData => {
+  const response = snapshot.responses.reset_credits;
+  if (!response) return NO_RESET_CREDITS;
+  if (!isOkResponse(response)) {
+    return { ...NO_RESET_CREDITS, error: snapshotResponseError(response) };
+  }
+  const summary = normalizeCodexResetCreditsPayload(response.body ?? response.bodyText);
+  if (summary.invalidPayload) {
+    return { ...NO_RESET_CREDITS, error: t('codex_quota.reset_credits_invalid_payload') };
+  }
+  return {
+    availableCount: summary.availableCount,
+    applicableAvailableCount: summary.applicableAvailableCount,
+    credits: summary.credits,
+    error: '',
+  };
+};
+
+/**
+ * Build quota data from the proxy's snapshot bundle (`usage`, `subscription`,
+ * `reset_credits`), the same parsing the direct `api-call` path used to do.
+ */
+export const buildCodexQuotaFromSnapshot = (
+  snapshot: QuotaSnapshot,
+  file: AuthFileItem,
   t: TFunction
-): Promise<CodexResetCreditsData> => {
-  try {
-    const result = await apiCallApi.request(
-      {
-        authIndex,
-        method: 'GET',
-        url: CODEX_RATE_LIMIT_RESET_CREDITS_URL,
-        header: {
-          ...requestHeader,
-          Accept: 'application/json',
-          'OpenAI-Beta': 'codex-1',
-          Originator: 'Codex Desktop',
-        },
-      },
-      { timeout: CODEX_OPTIONAL_REQUEST_TIMEOUT_MS }
-    );
-
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      return {
-        availableCount: null,
-        applicableAvailableCount: null,
-        credits: [],
-        error: getApiCallErrorMessage(result),
-      };
-    }
-
-    const summary = normalizeCodexResetCreditsPayload(result.body ?? result.bodyText);
-    if (summary.invalidPayload) {
-      return {
-        availableCount: null,
-        applicableAvailableCount: null,
-        credits: [],
-        error: t('codex_quota.reset_credits_invalid_payload'),
-      };
-    }
-
-    return {
-      availableCount: summary.availableCount,
-      applicableAvailableCount: summary.applicableAvailableCount,
-      credits: summary.credits,
-      error: '',
-    };
-  } catch (err: unknown) {
-    return {
-      availableCount: null,
-      applicableAvailableCount: null,
-      credits: [],
-      error: err instanceof Error ? err.message : t('common.unknown_error'),
-    };
-  }
-};
-
-const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQuotaData> => {
-  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
-  const authIndex = normalizeAuthIndex(rawAuthIndex);
-  if (!authIndex) {
-    throw new Error(t('codex_quota.missing_auth_index'));
-  }
-
-  const planTypeFromFile = resolveCodexPlanType(file);
-  const subscriptionActiveUntilFromFile = resolveCodexSubscriptionActiveUntil(file);
-  const accountId = resolveCodexChatgptAccountId(file);
-  const requestHeader = buildCodexRequestHeader(file);
-
-  const [result, liveSubscriptionActiveUntil] = await Promise.all([
-    apiCallApi.request({
-      authIndex,
-      method: 'GET',
-      url: CODEX_USAGE_URL,
-      header: requestHeader,
-    }),
-    fetchCodexSubscriptionActiveUntil(authIndex, accountId, requestHeader),
-  ]);
-
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
-  }
-
+): CodexQuotaData => {
+  const result = requireSnapshotUsage(snapshot, t('codex_quota.empty_windows'));
   const payload = parseCodexUsagePayload(result.body ?? result.bodyText);
   if (!payload) {
     throw new Error(t('codex_quota.empty_windows'));
   }
 
+  const subscription = snapshot.responses.subscription;
+  const liveSubscriptionActiveUntil = isOkResponse(subscription)
+    ? parseCodexSubscriptionActiveUntil(subscription.body ?? subscription.bodyText)
+    : null;
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
   const accountCredits = normalizeCodexAccountCredits(payload.credits);
   const resetCredits = payload.rate_limit_reset_credits ?? payload.rateLimitResetCredits ?? null;
   const usageResetCreditsData = normalizeCodexResetCreditsPayload(resetCredits);
-  const resetCreditsData = await fetchCodexResetCredits(authIndex, requestHeader, t);
+  const resetCreditsData = readCodexResetCredits(snapshot, t);
   const resetCreditsCountFromDetails =
     resetCreditsData.credits.length > 0 ? resetCreditsData.credits.length : null;
   const rateLimitResetCreditsAvailableCount =
@@ -461,9 +405,11 @@ const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
     usageResetCreditsData.applicableAvailableCount ??
     resetCreditsData.applicableAvailableCount ??
     rateLimitResetCreditsAvailableCount;
-  const planType = planTypeFromUsage ?? planTypeFromFile;
-  const subscriptionActiveUntil = liveSubscriptionActiveUntil ?? subscriptionActiveUntilFromFile;
-  const windows = buildCodexQuotaWindows(payload, t);
+  const planType = planTypeFromUsage ?? resolveCodexPlanType(file);
+  const subscriptionActiveUntil =
+    liveSubscriptionActiveUntil ?? resolveCodexSubscriptionActiveUntil(file);
+  const fetchedAtMs = snapshot.fetchedAtMs ?? undefined;
+  const windows = buildCodexQuotaWindows(payload, t, fetchedAtMs);
   return {
     planType,
     subscriptionActiveUntil,
@@ -474,8 +420,21 @@ const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
     rateLimitResetCredits: resetCreditsData.credits,
     rateLimitResetCreditsError: resetCreditsData.error,
     windows,
+    fetchedAtMs,
   };
 };
+
+const requireCodexAuthIndex = (file: AuthFileItem, t: TFunction): string => {
+  const authIndex = normalizeAuthIndex(file['auth_index'] ?? file.authIndex);
+  if (!authIndex) {
+    throw new Error(t('codex_quota.missing_auth_index'));
+  }
+  return authIndex;
+};
+
+/** Refresh through the proxy — the panel never calls the Codex usage endpoints itself. */
+const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQuotaData> =>
+  buildCodexQuotaFromSnapshot(await refreshSnapshotFor(requireCodexAuthIndex(file, t)), file, t);
 
 const createCodexRedeemRequestId = (): string => {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -493,14 +452,10 @@ const consumeCodexRateLimitResetCredit = async (
   file: AuthFileItem,
   t: TFunction
 ): Promise<string> => {
-  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
-  const authIndex = normalizeAuthIndex(rawAuthIndex);
-  if (!authIndex) {
-    throw new Error(t('codex_quota.missing_auth_index'));
-  }
-
+  const authIndex = requireCodexAuthIndex(file, t);
   const requestHeader = buildCodexRequestHeader(file);
 
+  // Consuming a credit is an action, not a quota read: it stays a direct api-call.
   const result = await apiCallApi.request({
     authIndex,
     method: 'POST',
@@ -536,7 +491,8 @@ const resetCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
     // Redemption already succeeded: direct the operator to the existing clear action.
     throw new Error(t('codex_quota.reset_cooldown_failed'));
   }
-  return fetchCodexQuota(file, t);
+  // The proxy's 60 s minimum interval would return the pre-reset snapshot.
+  return buildCodexQuotaFromSnapshot(await refreshSnapshotFor(authIndex, { force: true }), file, t);
 };
 
 export const CODEX_CONFIG: QuotaProviderData<CodexQuotaState, CodexQuotaData> = {
@@ -544,6 +500,7 @@ export const CODEX_CONFIG: QuotaProviderData<CodexQuotaState, CodexQuotaData> = 
   i18nPrefix: 'codex_quota',
   filterFn: (file) => isCodexFile(file) && !isDisabledAuthFile(file),
   fetchQuota: fetchCodexQuota,
+  fromSnapshot: buildCodexQuotaFromSnapshot,
   resetQuota: resetCodexQuota,
   canResetQuota: (quota) => (quota.rateLimitResetCreditsAvailableCount ?? 0) > 0,
   storeSelector: (state) => state.codexQuota,
@@ -566,6 +523,7 @@ export const CODEX_CONFIG: QuotaProviderData<CodexQuotaState, CodexQuotaData> = 
       data.rateLimitResetCreditsApplicableAvailableCount,
     rateLimitResetCredits: data.rateLimitResetCredits,
     rateLimitResetCreditsError: data.rateLimitResetCreditsError,
+    fetchedAtMs: data.fetchedAtMs,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',

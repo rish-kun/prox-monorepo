@@ -15,12 +15,15 @@ import type { QuotaProviderType } from './providers/types';
 
 export { DAY_MS, HOUR_MS };
 
-/** Weekly view spans a fortnight; the session view zooms to three days. */
+/**
+ * Weekly view spans a fortnight; the session view shows a single day, so
+ * Today means today — not two more days of projected windows.
+ */
 export type TimelineMode = 'weekly' | 'session';
 
 export const TIMELINE_SPAN_DAYS: Record<TimelineMode, number> = {
   weekly: 14,
-  session: 3,
+  session: 1,
 };
 
 /** The rolling window the session view projects, in hours. */

@@ -1,60 +1,89 @@
 /**
- * 额度查询页：提供商 tabs + 统一卡网格。
+ * 额度查询页：按提供商分组的紧凑账户行。
  *
- * 保留的行为契约（重设计不改）：
- * - 现有提供商保持点击加载；Devin 首次可见时主动查询一次，不轮询；
+ * - 每个提供商一组：一行容量头（每账户一个方块 + 可用数）+ 每账户一行；
+ *   行内列出全部额度窗口（剩余 %、重置时刻、倒计时），状态列只在
+ *   5 小时 / 周窗口耗尽或登录失效时出声；展开行显示完整明细与操作。
+ * - 数据默认来自代理被动记录的上游限额响应头（随凭证列表返回，零上游请求）；
+ *   进入页面与标签页重新可见时只重取本地凭证列表（10s 节流）。主动查询上游
+ *   用量接口（Anthropic /api/oauth/usage 等，限流严格）只在用户点击刷新时发生，
+ *   其结果与被动窗口合并（同名窗口以被动数据为准，模型窗口保留）。
+ *   Devin 首次可见时另外主动查询一次；
  * - cacheGeneration 会话隔离 + request-id 去重（见 useQuotaBatchLoader）；
  * - 文件列表变化后按 provider 剪枝额度缓存（已删文件不残留）；
+ * - Claude / Codex 额度只来自代理：代理每小时轮询一次并保存快照，本页加载时
+ *   读 GET /quota/snapshots 回填（零上游请求），刷新走 POST /quota/refresh
+ *   （刷新全部 / 分组刷新合并为一个请求）；顶部是剩余额度预测图；
+ * - 其他提供商主动查询成功的结果写入 localStorage（按 API base 隔离），重载后回填，
+ *   时间线与模型窗口无需再打一次上游；
  * - useHeaderRefresh 单槽位：本页唯一注册者，全局刷新 = 重取文件列表。
+ * - "Prioritise plan": Claude / Codex rows with a running 5-hour window can be
+ *   routed first until that window resets (GET/POST/DELETE /quota/burst, polled
+ *   every 60 s); the forecast drains bursting accounts first.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
-import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { IconSearch, IconX } from '@/components/ui/icons';
-import { Select } from '@/components/ui/Select';
+import { IconChevronDown } from '@/components/ui/icons';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNow } from '@/hooks/useNow';
 import { useRevealGroup } from '@/hooks/motion';
-import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
+import { useAuthStore, useNotificationStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
-import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
+import { normalizeAuthIndex } from '@/utils/authIndex';
 import { QuotaHeader } from './components/QuotaHeader';
-import { QuotaCard } from './components/QuotaCard';
+import { QuotaAccountRow } from './components/QuotaAccountRow';
+import { QuotaProviderGroup } from './components/QuotaProviderGroup';
+import { QuotaRoutingOrder } from './components/QuotaRoutingOrder';
+import { routingOrder } from './routingOrder';
 import { QuotaTimeline } from './components/QuotaTimeline';
+import { QuotaForecast } from './components/QuotaForecast';
+import { QUOTA_TAB_ORDER } from './constants';
 import {
-  CARD_ENTRANCE_BUDGET_MS,
-  QUOTA_PAGE_SIZE,
-  QUOTA_SORT_MODES,
-  QUOTA_TAB_ORDER,
-  type QuotaSortMode,
-  type QuotaTabId,
-} from './constants';
-import {
-  buildTabCounts,
   canRefreshQuotaAfterList,
   classifyQuotaFiles,
-  filterEntriesByTab,
-  filterEntriesBySearch,
-  paginate,
-  sortQuotaEntries,
+  shouldAutoRefreshQuota,
   type QuotaFileEntry,
 } from './logic';
-import { nextRecoveryMs } from './resetSchedule';
+import {
+  canPrioritiseQuotaRow,
+  canPrioritiseWeeklyQuotaRow,
+  canStartQuotaWindow,
+  limitColumnCount,
+  orderQuotaLimits,
+  resolveQuotaRowStatus,
+  summarizeQuotaLimits,
+  type QuotaLimitSummary,
+  type QuotaRowStatus,
+} from './quotaRowSummary';
+import {
+  mergeQuotaLimits,
+  readPassiveQuota,
+  rollOverLimits,
+  shouldClearStaleCooldown,
+} from './passiveQuota';
+import { readSavedQuota, syncSavedQuota } from './quotaPersistence';
+import { isProxyQuotaType } from './proxyQuota';
 import { QUOTA_ADAPTERS, getQuotaSetter, type QuotaCardState } from './providers';
 import type { QuotaProviderType } from './providers/types';
 import { useDevinQuotaAutoLoad } from './providers/devin/useDevinQuotaAutoLoad';
 import { useQuotaActions } from './hooks/useQuotaActions';
 import { useQuotaBatchLoader } from './hooks/useQuotaBatchLoader';
-import { readQuotaUiState, writeQuotaUiState } from './uiState';
+import { useProxyQuotaHydration } from './hooks/useProxyQuotaHydration';
+import { useQuotaBursts } from './hooks/useQuotaBursts';
+import { rowBurstsByIndex, toForecastBursts } from './quotaBurst';
+import { readQuotaViewPrefs, writeQuotaViewPrefs } from './uiState';
 import styles from './QuotaPage.module.scss';
 
-const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
-const SKELETON_CARD_COUNT = 6;
+const SKELETON_ROW_COUNT = 3;
+
+/** Claude / Codex are hydrated from the proxy's snapshots instead of localStorage. */
+const PERSISTED_QUOTA_TYPES = QUOTA_TAB_ORDER.filter((type) => !isProxyQuotaType(type));
+const PROXY_FORECAST_PROVIDERS = ['claude', 'codex'] as const;
 
 /**
  * Existing providers display filenames; Devin's card and timeline share an
@@ -62,23 +91,68 @@ const SKELETON_CARD_COUNT = 6;
  */
 const displayNameFor = (name: string) => name;
 
+interface AccountRowModel {
+  entry: QuotaFileEntry;
+  key: string;
+  quota: QuotaCardState | undefined;
+  limits: QuotaLimitSummary[];
+  status: QuotaRowStatus;
+  livePlanType: string | null;
+  /** Fetched state with live windows overlaid — what the reset timeline draws. */
+  timelineQuota: QuotaCardState | undefined;
+  /** A newer fetch shows quota back while the proxy still holds a cooldown. */
+  staleCooldown: boolean;
+  /** The 5-hour window is idle and can be opened on demand. */
+  canStartWindow: boolean;
+  authIndex: string | null;
+  /** The 5-hour window is running with quota left: it can be prioritised. */
+  canPrioritise: boolean;
+  /** The weekly window is running with quota left: it can be prioritised until its reset. */
+  canPrioritiseWeekly: boolean;
+}
+
+/**
+ * Claude/Codex lanes are built from `windows`, so overlay the merged limits as
+ * windows on top of the fetched state (keeping e.g. Codex reset credits). The
+ * raw reset instants are kept: the timeline projects later windows from them.
+ */
+function buildTimelineQuota(
+  type: QuotaProviderType,
+  fetched: QuotaCardState | undefined,
+  limits: readonly QuotaLimitSummary[],
+  labelOf: (limit: QuotaLimitSummary) => string
+): QuotaCardState | undefined {
+  if (type !== 'claude' && type !== 'codex') return fetched;
+  if (limits.length === 0) return fetched;
+  const base = fetched?.status === 'success' ? fetched : {};
+  return {
+    ...base,
+    status: 'success',
+    windows: limits.map((limit) => ({
+      id: limit.id,
+      label: labelOf(limit),
+      usedPercent: limit.remaining === null ? null : 100 - limit.remaining,
+      resetAtMs: limit.resetAtMs,
+      periodHours: limit.periodHours,
+    })),
+  } as QuotaCardState;
+}
+
 export function QuotaPage() {
   const { t } = useTranslation();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const apiBase = useAuthStore((state) => state.apiBase);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
 
   const [files, setFiles] = useState<AuthFileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<QuotaTabId>(() => readQuotaUiState()?.tab ?? 'all');
-  const [sortMode, setSortMode] = useState<QuotaSortMode>(
-    () => readQuotaUiState()?.sortMode ?? 'default'
-  );
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  // 页头 + tabs 的入场级联（标题 → meta → 动作 → tabs，级差 70ms）
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [timelineOpen, setTimelineOpen] = useState(() => readQuotaViewPrefs().timelineOpen);
+  const [forecastOpen, setForecastOpen] = useState(() => readQuotaViewPrefs().forecastOpen);
+  // 页头的入场级联（标题 → meta → 动作）
   const revealRef = useRevealGroup<HTMLDivElement>();
+  const now = useNow();
 
   const disableControls = connectionStatus !== 'connected';
 
@@ -123,8 +197,7 @@ export function QuotaPage() {
     };
   }, [loadFiles]);
 
-  /* ---------- 额度缓存 ----------
-   * 排在归类/排序之前：「最快恢复优先」要读它算排序键。 */
+  /* ---------- 额度缓存 ---------- */
 
   const antigravityQuota = useQuotaStore((state) => state.antigravityQuota);
   const claudeQuota = useQuotaStore((state) => state.claudeQuota);
@@ -154,67 +227,81 @@ export function QuotaPage() {
     [quotaByType]
   );
 
-  /* ---------- 归类 / 过滤 / 排序 / 分页 ---------- */
-
-  // 只在「最快恢复优先」下订阅分钟时钟。默认序下不门控的话，pageItems 每分钟
-  // 换一次身份，会反复空转下面那个「刷新全部」的 loading 下降沿 effect。
-  const tick = useNow(sortMode !== 'default');
-  const sortNow = sortMode === 'default' ? 0 : tick;
+  /* ---------- 归类：每个提供商一组，组内保持文件顺序（刷新不跳行） ---------- */
 
   const entries = useMemo(() => classifyQuotaFiles(files), [files]);
-  const tabCounts = useMemo(() => buildTabCounts(entries), [entries]);
-  const filteredEntries = useMemo(
-    () => filterEntriesBySearch(filterEntriesByTab(entries, tab), search),
-    [entries, tab, search]
-  );
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value);
-    setPage(1);
-  }, []);
 
-  const resolveNextRecovery = useCallback(
-    (entry: QuotaFileEntry) => nextRecoveryMs(entry.type, getQuota(entry), sortNow),
-    [getQuota, sortNow]
-  );
-  // 排序在分页之前：否则「最快恢复」只在当前页内成立。
-  const sortedEntries = useMemo(
-    () => sortQuotaEntries(filteredEntries, sortMode, resolveNextRecovery),
-    [filteredEntries, sortMode, resolveNextRecovery]
-  );
+  const groups = useMemo(() => {
+    const byType = new Map<QuotaProviderType, AccountRowModel[]>();
+    for (const entry of entries) {
+      const quota = getQuota(entry);
+      const live = readPassiveQuota(entry.type, entry.file);
+      const fetchedAtMs = quota?.status === 'success' ? (quota.fetchedAtMs ?? null) : null;
+      const rawLimits = orderQuotaLimits(
+        mergeQuotaLimits(summarizeQuotaLimits(entry.type, quota), live.limits, {
+          fetchedAtMs,
+          liveObservedAtMs: live.observedAtMs,
+        })
+      );
+      const limits = rollOverLimits(rawLimits, now);
+      const status = resolveQuotaRowStatus(quota, Boolean(entry.file.disabled), limits);
+      const row: AccountRowModel = {
+        entry,
+        key: `${entry.type}:${getQuotaCacheKey(entry.file)}`,
+        quota,
+        limits,
+        status,
+        livePlanType: live.planType,
+        timelineQuota: buildTimelineQuota(entry.type, quota, rawLimits, (limit) =>
+          limit.labelKey
+            ? t(limit.labelKey, { ...limit.labelParams, defaultValue: limit.label })
+            : limit.label
+        ),
+        staleCooldown: shouldClearStaleCooldown(
+          entry.file,
+          limits,
+          fetchedAtMs,
+          live.observedAtMs,
+          now
+        ),
+        canStartWindow: canStartQuotaWindow(entry.type, status, limits, now),
+        authIndex: normalizeAuthIndex(entry.file['auth_index'] ?? entry.file.authIndex),
+        canPrioritise: canPrioritiseQuotaRow(entry.type, status, limits, now),
+        canPrioritiseWeekly: canPrioritiseWeeklyQuotaRow(entry.type, status, limits, now),
+      };
+      const list = byType.get(entry.type) ?? [];
+      list.push(row);
+      byType.set(entry.type, list);
+    }
+    return QUOTA_TAB_ORDER.filter((type) => byType.has(type)).map((type) => ({
+      type,
+      rows: byType.get(type) as AccountRowModel[],
+    }));
+  }, [entries, getQuota, now, t]);
 
-  const { pageItems, currentPage, totalPages } = useMemo(
-    () => paginate(sortedEntries, page, QUOTA_PAGE_SIZE),
-    [sortedEntries, page]
-  );
+  const timelineQuotaByKey = useMemo(() => {
+    const map = new Map<string, QuotaCardState | undefined>();
+    groups.forEach(({ rows }) => rows.forEach((row) => map.set(row.key, row.timelineQuota)));
+    return map;
+  }, [groups]);
 
-  const handleTabChange = useCallback((next: string) => {
-    setTab(next as QuotaTabId);
-    setPage(1);
-    writeQuotaUiState({ tab: next as QuotaTabId });
-  }, []);
-
-  const handleSortModeChange = useCallback((next: string) => {
-    setSortMode(next as QuotaSortMode);
-    setPage(1);
-    writeQuotaUiState({ sortMode: next as QuotaSortMode });
-  }, []);
-
-  const sortOptions = useMemo(
-    () =>
-      QUOTA_SORT_MODES.map((mode) => ({ value: mode, label: t(`quota_management.sort_${mode}`) })),
-    [t]
+  const getTimelineQuota = useCallback(
+    (entry: QuotaFileEntry) =>
+      timelineQuotaByKey.get(`${entry.type}:${getQuotaCacheKey(entry.file)}`),
+    [timelineQuotaByKey]
   );
 
   const { loadedCount, attentionCount } = useMemo(() => {
     let loaded = 0;
     let attention = 0;
-    entries.forEach((entry) => {
-      const status = quotaByType[entry.type][getQuotaCacheKey(entry.file)]?.status;
-      if (status === 'success') loaded += 1;
-      else if (status === 'error') attention += 1;
-    });
+    groups.forEach(({ rows }) =>
+      rows.forEach((row) => {
+        if (row.limits.length > 0) loaded += 1;
+        if (row.status.kind === 'error' || row.status.kind === 'logged_out') attention += 1;
+      })
+    );
     return { loadedCount: loaded, attentionCount: attention };
-  }, [entries, quotaByType]);
+  }, [groups]);
 
   // 剪枝：文件列表落定后，各 provider 缓存只保留仍存在的凭证
   useEffect(() => {
@@ -237,6 +324,43 @@ export function QuotaPage() {
     });
   }, [entries, error, filesGeneration, loading, sessionGeneration]);
 
+  // 回填：文件列表落定后，用上次主动查询成功的结果补齐尚无状态的凭证。
+  const listSettled = !loading && !error && filesGeneration === sessionGeneration;
+  // Claude / Codex: the proxy's latest snapshots, re-read with every list load.
+  useProxyQuotaHydration(files, listSettled && !disableControls);
+  useEffect(() => {
+    if (!listSettled || !apiBase) return;
+    PERSISTED_QUOTA_TYPES.forEach((type) => {
+      const saved = readSavedQuota(apiBase, type);
+      const keys = entries
+        .filter((entry) => entry.type === type)
+        .map((entry) => getQuotaCacheKey(entry.file))
+        .filter((key) => saved[key]);
+      if (keys.length === 0) return;
+      getQuotaSetter(QUOTA_ADAPTERS[type])((prev) => {
+        const missing = keys.filter((key) => !prev[key] || prev[key].status === 'idle');
+        if (missing.length === 0) return prev;
+        const next = { ...prev };
+        missing.forEach((key) => {
+          const state = saved[key].state as QuotaCardState;
+          next[key] = { ...state, fetchedAtMs: state.fetchedAtMs ?? saved[key].savedAtMs };
+        });
+        return next;
+      });
+    });
+  }, [apiBase, entries, listSettled]);
+
+  // 持久化：每次主动查询成功后保存（失败/加载中不覆盖已保存的成功结果）。
+  useEffect(() => {
+    if (!listSettled || !apiBase) return;
+    const survivors: Partial<Record<QuotaProviderType, Set<string>>> = {};
+    PERSISTED_QUOTA_TYPES.forEach((type) => {
+      survivors[type] = new Set();
+    });
+    entries.forEach((entry) => survivors[entry.type]?.add(getQuotaCacheKey(entry.file)));
+    syncSavedQuota(apiBase, quotaByType, survivors, Date.now());
+  }, [apiBase, entries, listSettled, quotaByType]);
+
   /* ---------- 加载与操作 ---------- */
 
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
@@ -244,13 +368,34 @@ export function QuotaPage() {
 
   const pendingRefreshRef = useRef<number | null>(null);
   const prevLoadingRef = useRef(loading);
+  const lastListAtRef = useRef<number | null>(null);
 
-  // 刷新全部：先重取文件列表，待其落定（loading 下降沿）再批量拉当前页额度
+  // 刷新全部（仅用户点击）：先重取文件列表，待其落定（loading 下降沿）再批量拉全部额度
   const handleRefreshAll = useCallback(() => {
     if (disableControls) return;
     pendingRefreshRef.current = sessionGeneration;
+    lastListAtRef.current = Date.now();
     void loadFiles();
   }, [disableControls, loadFiles, sessionGeneration]);
+
+  // 标签页重新激活时只重取本地凭证列表（携带被动额度），不打上游用量接口。
+  const onPageActivated = useEffectEvent(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (disableControls || loading) return;
+    if (!shouldAutoRefreshQuota(lastListAtRef.current, Date.now())) return;
+    lastListAtRef.current = Date.now();
+    void loadFiles();
+  });
+
+  useEffect(() => {
+    const listener = () => onPageActivated();
+    document.addEventListener('visibilitychange', listener);
+    window.addEventListener('focus', listener);
+    return () => {
+      document.removeEventListener('visibilitychange', listener);
+      window.removeEventListener('focus', listener);
+    };
+  }, []);
 
   useEffect(() => {
     const wasLoading = prevLoadingRef.current;
@@ -274,12 +419,32 @@ export function QuotaPage() {
         disableControls
       )
     ) {
-      void loadQuota(pageItems);
+      void loadQuota(entries);
     }
-  }, [disableControls, error, filesGeneration, loading, loadQuota, pageItems, sessionGeneration]);
+  }, [disableControls, entries, error, filesGeneration, loading, loadQuota, sessionGeneration]);
+
+  // 冷却清除：主动查询比代理被动观测更新、且显示额度已恢复（如手动重置周额度），
+  // 而代理仍把该凭证挂在冷却中时，清除其路由冷却并重取列表。每次查询结果只尝试一次。
+  const clearedCooldownRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (disableControls || !listSettled) return;
+    const pending = groups
+      .flatMap(({ rows }) => rows)
+      .filter((row) => row.staleCooldown)
+      .map((row) => ({
+        attempt: `${row.key}@${row.quota?.fetchedAtMs ?? ''}`,
+        authIndex: row.authIndex,
+      }))
+      .filter(({ attempt, authIndex }) => authIndex && !clearedCooldownRef.current.has(attempt));
+    if (pending.length === 0) return;
+    pending.forEach(({ attempt }) => clearedCooldownRef.current.add(attempt));
+    void Promise.allSettled(
+      pending.map(({ authIndex }) => authFilesApi.resetCooldown(authIndex as string))
+    ).then(() => loadFiles());
+  }, [disableControls, groups, listSettled, loadFiles]);
 
   useDevinQuotaAutoLoad(
-    pageItems,
+    entries,
     disableControls ||
       loading ||
       batchLoading ||
@@ -290,27 +455,88 @@ export function QuotaPage() {
 
   const canUseActions = !disableControls && !loading && filesGeneration === sessionGeneration;
 
-  /* ---------- 首屏卡片一次性级联入场 ----------
-   * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过自己的
-   * 延迟（QuotaCard 内 useState 初始化），后续切 tab/翻页/刷新新挂载的卡片
-   * 拿到 null —— 不重播。 */
+  // 启动 5 小时窗口：经代理向该凭证发一条最便宜的 "hi"，响应头随即刷新被动额度，
+  // 重取本地列表即可看到新窗口（不调用上游用量接口）。
+  const showNotification = useNotificationStore((state) => state.showNotification);
+  const [startingWindowKeys, setStartingWindowKeys] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const startWindow = useCallback(
+    async (row: AccountRowModel) => {
+      const authIndex = normalizeAuthIndex(
+        row.entry.file['auth_index'] ?? row.entry.file.authIndex
+      );
+      const name = row.entry.file.email || row.entry.file.name;
+      if (!authIndex || startingWindowKeys.has(row.key)) return;
+      setStartingWindowKeys((prev) => new Set(prev).add(row.key));
+      try {
+        await authFilesApi.startQuotaWindow(authIndex);
+        showNotification(t('quota_management.start_window_success', { name }), 'success');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : t('common.unknown_error');
+        showNotification(t('quota_management.start_window_failed', { name, message }), 'error');
+      } finally {
+        setStartingWindowKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(row.key);
+          return next;
+        });
+        void loadFiles();
+      }
+    },
+    [loadFiles, showNotification, startingWindowKeys, t]
+  );
 
-  const [cardsAnimated, setCardsAnimated] = useState(false);
-  const enableCardEntrance = !cardsAnimated && !loading && pageItems.length > 0;
-  useEffect(() => {
-    if (enableCardEntrance) {
-      setCardsAnimated(true);
-    }
-  }, [enableCardEntrance]);
-  const cardEntranceDelay = (index: number): number | null => {
-    if (!enableCardEntrance) return null;
-    if (pageItems.length <= 1) return 0;
-    return Math.round((index / (pageItems.length - 1)) * CARD_ENTRANCE_BUDGET_MS);
-  };
+  const toggleExpanded = useCallback((key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleForecast = useCallback(() => {
+    setForecastOpen((prev) => {
+      writeQuotaViewPrefs({ forecastOpen: !prev });
+      return !prev;
+    });
+  }, []);
+
+  const forecastProviders = useMemo(
+    () => PROXY_FORECAST_PROVIDERS.filter((type) => entries.some((entry) => entry.type === type)),
+    [entries]
+  );
+
+  /* ---------- Prioritise plan ---------- */
+
+  const {
+    bursts,
+    supported: burstsSupported,
+    pending: burstPending,
+    run: runBurst,
+  } = useQuotaBursts(!disableControls && forecastProviders.length > 0, now);
+  const rowBursts = useMemo(() => {
+    const typeOf = new Map(
+      entries.map((entry) => [
+        normalizeAuthIndex(entry.file['auth_index'] ?? entry.file.authIndex),
+        entry.type,
+      ])
+    );
+    return rowBurstsByIndex(bursts, (authIndex) => typeOf.get(authIndex) ?? '');
+  }, [bursts, entries]);
+  const forecastBurstList = useMemo(() => toForecastBursts(bursts), [bursts]);
+
+  const toggleTimeline = useCallback(() => {
+    setTimelineOpen((prev) => {
+      writeQuotaViewPrefs({ timelineOpen: !prev });
+      return !prev;
+    });
+  }, []);
 
   /* ---------- 渲染 ---------- */
 
-  const isEmpty = !loading && filteredEntries.length === 0;
+  const isEmpty = !loading && entries.length === 0;
 
   return (
     <div className={styles.page} ref={revealRef}>
@@ -324,148 +550,144 @@ export function QuotaPage() {
       />
 
       <section className={styles.workbench}>
-        {/* 提供商导航与搜索工具栏分层，避免不同控件争夺视觉焦点。 */}
-        <div className={styles.tabsRow} data-reveal>
-          <ProviderTabs
-            types={TAB_IDS}
-            counts={tabCounts}
-            active={tab}
-            resolvedTheme={resolvedTheme}
-            onChange={handleTabChange}
-          />
-        </div>
-
-        <div className={styles.toolbar}>
-          <div className={styles.search}>
-            <IconSearch size={16} className={styles.searchIcon} aria-hidden="true" />
-            <input
-              ref={searchInputRef}
-              className={styles.searchInput}
-              type="search"
-              value={search}
-              onChange={(event) => handleSearchChange(event.target.value)}
-              placeholder={t('quota_management.search_placeholder')}
-              aria-label={t('quota_management.search_label')}
-            />
-            {search && (
-              <button
-                type="button"
-                className={styles.clearSearch}
-                aria-label={t('quota_management.search_clear')}
-                title={t('quota_management.search_clear')}
-                onClick={() => {
-                  handleSearchChange('');
-                  searchInputRef.current?.focus();
-                }}
-              >
-                <IconX size={14} aria-hidden="true" />
-              </button>
-            )}
-          </div>
-          <div className={styles.sort}>
-            <Select
-              value={sortMode}
-              options={sortOptions}
-              onChange={handleSortModeChange}
-              ariaLabel={t('quota_management.sort_label')}
-              size="sm"
-            />
-          </div>
-        </div>
-
         {error && (
           <div className={styles.errorBanner} role="alert">
             {error}
           </div>
         )}
 
-        {loading ? (
-          <div className={styles.grid} aria-hidden="true">
-            {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
-              <Skeleton key={index} height={168} rounded={14} />
+        {forecastProviders.length > 0 && (
+          <QuotaForecast
+            providers={forecastProviders}
+            files={files}
+            open={forecastOpen}
+            onToggle={toggleForecast}
+            enabled={!disableControls}
+            bursts={forecastBurstList}
+          />
+        )}
+
+        {loading && entries.length === 0 ? (
+          <div className={styles.groups} aria-hidden="true">
+            {Array.from({ length: SKELETON_ROW_COUNT }, (_, index) => (
+              <Skeleton key={index} height={64} rounded={12} />
             ))}
           </div>
         ) : isEmpty ? (
           <EmptyState
-            title={
-              search.trim()
-                ? t('quota_management.search_empty_title')
-                : tab === 'all'
-                  ? t('quota_management.empty_title')
-                  : t(`${QUOTA_ADAPTERS[tab].i18nPrefix}.empty_title`)
-            }
-            description={
-              search.trim()
-                ? t('quota_management.search_empty_desc')
-                : tab === 'all'
-                  ? t('quota_management.empty_desc')
-                  : t(`${QUOTA_ADAPTERS[tab].i18nPrefix}.empty_desc`)
-            }
-            action={
-              search.trim() ? (
-                <Button variant="secondary" size="sm" onClick={() => handleSearchChange('')}>
-                  {t('quota_management.search_clear')}
-                </Button>
-              ) : tab === 'all' ? undefined : (
-                <Button variant="secondary" size="sm" onClick={() => handleTabChange('all')}>
-                  {t('auth_files.filter_all')}
-                </Button>
-              )
-            }
+            title={t('quota_management.empty_title')}
+            description={t('quota_management.empty_desc')}
           />
         ) : (
-          <div className={styles.grid}>
-            {pageItems.map((entry, index) => (
-              <QuotaCard
-                key={`${entry.type}:${getQuotaCacheKey(entry.file)}`}
-                entry={entry}
-                quota={getQuota(entry)}
+          <div className={styles.groups}>
+            {groups.map(({ type, rows }) => (
+              <QuotaProviderGroup
+                key={type}
+                type={type}
+                statuses={rows.map((row) => row.status)}
+                now={now}
                 resolvedTheme={resolvedTheme}
-                canRefresh={canUseActions && !entry.file.disabled}
-                resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
-                entranceDelayMs={cardEntranceDelay(index)}
-                onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-                onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
-              />
+                refreshing={batchLoading}
+                canRefresh={canUseActions}
+                onRefresh={() => void loadQuota(rows.map((row) => row.entry))}
+                limitColumns={limitColumnCount(rows.map((row) => row.limits.length))}
+                routing={
+                  <QuotaRoutingOrder
+                    now={now}
+                    steps={routingOrder(
+                      rows.map((row) => ({
+                        authIndex: row.authIndex,
+                        name: row.entry.file.email || row.entry.file.name,
+                        priority:
+                          typeof row.entry.file.priority === 'number' ? row.entry.file.priority : 0,
+                        disabled: Boolean(row.entry.file.disabled),
+                        status: row.status,
+                        coolingDown: Boolean(row.entry.file.unavailable) && !row.staleCooldown,
+                        burst: row.authIndex ? (rowBursts.get(row.authIndex) ?? null) : null,
+                      }))
+                    )}
+                  />
+                }
+              >
+                {rows.map((row) => {
+                  const burst = row.authIndex ? (rowBursts.get(row.authIndex) ?? null) : null;
+                  const burstName = row.entry.file.email || row.entry.file.name;
+                  return (
+                    <QuotaAccountRow
+                      key={row.key}
+                      entry={row.entry}
+                      quota={row.quota}
+                      limits={row.limits}
+                      status={row.status}
+                      livePlanType={row.livePlanType}
+                      now={now}
+                      resolvedTheme={resolvedTheme}
+                      expanded={expanded.has(row.key)}
+                      canRefresh={canUseActions && !row.entry.file.disabled}
+                      resetting={resettingQuotaName === getQuotaCacheKey(row.entry.file)}
+                      canStartWindow={row.canStartWindow}
+                      startingWindow={startingWindowKeys.has(row.key)}
+                      onStartWindow={() => void startWindow(row)}
+                      burst={burst}
+                      canPrioritise={
+                        burstsSupported && !burst && row.canPrioritise && Boolean(row.authIndex)
+                      }
+                      burstPending={row.authIndex ? burstPending.has(row.authIndex) : false}
+                      canPrioritiseWeekly={
+                        burstsSupported &&
+                        !burst &&
+                        row.canPrioritiseWeekly &&
+                        Boolean(row.authIndex)
+                      }
+                      onPrioritise={() => {
+                        if (row.authIndex) void runBurst('prioritise', row.authIndex, burstName);
+                      }}
+                      onPrioritiseWeekly={() => {
+                        if (row.authIndex) {
+                          void runBurst('prioritise', row.authIndex, burstName, 'weekly');
+                        }
+                      }}
+                      onStopBurst={() => {
+                        if (row.authIndex) void runBurst('cancel', row.authIndex, burstName);
+                      }}
+                      onToggle={() => toggleExpanded(row.key)}
+                      onRefresh={() =>
+                        void refreshQuota(row.entry.file, QUOTA_ADAPTERS[row.entry.type])
+                      }
+                      onReset={() => resetQuota(row.entry.file, QUOTA_ADAPTERS[row.entry.type])}
+                    />
+                  );
+                })}
+              </QuotaProviderGroup>
             ))}
           </div>
         )}
 
-        {!loading && filteredEntries.length > QUOTA_PAGE_SIZE && (
-          <div className={styles.pagination}>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage <= 1}
+        {entries.length > 0 && (
+          <div className={styles.timelineSection}>
+            <button
+              type="button"
+              className={styles.timelineToggle}
+              aria-expanded={timelineOpen}
+              onClick={toggleTimeline}
             >
-              {t('auth_files.pagination_prev')}
-            </Button>
-            <div className={styles.pageInfo}>
-              {t('auth_files.pagination_info', {
-                current: currentPage,
-                total: totalPages,
-                count: filteredEntries.length,
-              })}
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage >= totalPages}
-            >
-              {t('auth_files.pagination_next')}
-            </Button>
+              <IconChevronDown
+                size={14}
+                aria-hidden="true"
+                className={`${styles.timelineChevron} ${timelineOpen ? styles.timelineChevronOpen : ''}`}
+              />
+              {t('quota_management.timeline_toggle')}
+            </button>
+            {timelineOpen && (
+              <QuotaTimeline
+                entries={entries}
+                quotaFor={getTimelineQuota}
+                displayNameFor={displayNameFor}
+                resolvedTheme={resolvedTheme}
+              />
+            )}
           </div>
         )}
-
-        {/* 时间线只比较当前页凭证，避免大量凭证一次性生成无界泳道。 */}
-        <QuotaTimeline
-          entries={pageItems}
-          quotaFor={getQuota}
-          displayNameFor={displayNameFor}
-          resolvedTheme={resolvedTheme}
-        />
       </section>
     </div>
   );

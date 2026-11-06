@@ -123,6 +123,20 @@ export function buildTabCounts(entries: QuotaFileEntry[]): Record<string, number
   return counts;
 }
 
+/**
+ * Minimum gap between automatic credential-list reloads on tab re-activation.
+ * The list is local (no upstream call); the throttle only avoids redundant
+ * reloads when focus and visibility events fire together.
+ */
+export const QUOTA_AUTO_REFRESH_MIN_INTERVAL_MS = 10_000;
+
+/** Throttle automatic reloads so rapid tab switching does not reload repeatedly. */
+export const shouldAutoRefreshQuota = (
+  lastRefreshAtMs: number | null,
+  nowMs: number,
+  minIntervalMs: number = QUOTA_AUTO_REFRESH_MIN_INTERVAL_MS
+): boolean => lastRefreshAtMs === null || nowMs - lastRefreshAtMs >= minIntervalMs;
+
 export const isQuotaRefreshDisabled = (
   canRefresh: boolean,
   loading: boolean,

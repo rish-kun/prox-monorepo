@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { IconRefreshCw } from '@/components/ui/icons';
+import { PageToolbarSlot } from '@/components/layout/PageToolbar';
 import { useCountUp } from '@/hooks/motion';
 import styles from './QuotaHeader.module.scss';
 
@@ -64,6 +65,7 @@ export function QuotaHeader(props: QuotaHeaderProps) {
           <IconRefreshCw size={14} className={refreshing ? styles.spinning : undefined} />
           {t('quota_management.refresh_all_credentials')}
         </button>
+        <PageToolbarSlot />
       </div>
     </header>
   );

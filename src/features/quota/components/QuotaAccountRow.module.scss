@@ -1,0 +1,509 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * 紧凑账户行：身份 | 全部额度窗口 | 状态（仅异常时出声）| 刷新。
+ * 遥测数字一律 mono + tabular-nums，与卡片外衣同一语法。
+ *
+ * Every row of a provider group gets identical tracks, sized only from the
+ * group's width (`cqi`, the group is the size container) and its limit column
+ * count (`--quota-limit-columns`, set by the group to its widest row) — never
+ * from a row's content — so each limit starts at the same x in every row and a
+ * row with fewer limits leaves its slot empty:
+ *
+ *   identity  clamp(150px, rest, 240px) — gives way first, while limit
+ *             columns stay >= 136px
+ *   limits    N equal columns, 16px apart
+ *   status    fixed 140px; text ellipsises, actions sit right-aligned
+ *   refresh   30px
+ *
+ * Fixed part per row: 12 + 12 padding, 3 x 12 gaps, 140 status, 30 refresh =
+ * 230px. Below the point where the limit columns would drop under 120px
+ * (group content < 772px with 3 columns), every row moves its limits to a
+ * second line together.
+ * ============================================================ */
+
+.item {
+  border-bottom: 1px solid var(--border-color);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.itemDisabled {
+  opacity: 0.5;
+}
+
+.row {
+  --quota-status-width: 140px;
+  display: grid;
+  /* identity = what is left once the fixed part and N x (136 + 16) - 16 of limits are taken. */
+  grid-template-columns:
+    clamp(
+      150px,
+      100cqi - 74px - var(--quota-status-width) - var(--quota-limit-columns, 3) * 152px,
+      240px
+    )
+    minmax(0, 1fr) var(--quota-status-width) 30px;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 7px 12px;
+  min-width: 0;
+}
+
+/* ---------- 身份 ---------- */
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .identity:hover {
+    background: var(--bg-secondary);
+  }
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-tertiary);
+  transform: rotate(-90deg);
+  transition: transform $transition-fast;
+}
+
+.chevronOpen {
+  transform: none;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dotOk {
+  background: var(--viz-success);
+}
+
+.dotWarn {
+  background: var(--quota-medium-color);
+}
+
+.dotBad {
+  background: var(--viz-failure);
+}
+
+.dotIdle {
+  background: var(--border-hover);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.plan {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* ---------- 额度窗口 ---------- */
+
+.limits {
+  display: grid;
+  grid-template-columns: repeat(var(--quota-limit-columns, 3), minmax(0, 1fr));
+  gap: 8px 16px;
+  min-width: 0;
+}
+
+.limit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.limitHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.limitLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.limitModel .limitLabel {
+  color: var(--text-tertiary);
+}
+
+.limitValue {
+  flex: none;
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.valueOut {
+  color: var(--viz-failure);
+}
+
+.track {
+  height: 5px;
+  border-radius: $radius-full;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: $radius-full;
+  transition: width 360ms var(--ease-out-strong, ease);
+}
+
+.levelHigh {
+  background: var(--viz-success);
+}
+
+.levelMedium {
+  background: var(--quota-medium-color);
+}
+
+.levelLow {
+  background: var(--viz-failure);
+}
+
+.levelUnknown {
+  background: transparent;
+}
+
+.limitReset {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.resetAbsolute {
+  color: var(--text-secondary);
+}
+
+.message {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--danger-color);
+}
+
+.skeleton {
+  min-width: 0;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  animation: quota-row-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes quota-row-pulse {
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* ---------- 状态与动作 ---------- */
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* "Back in 10 hours" never widens the column: ellipsis, full text in the title. */
+.statusText {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusWarn {
+  color: var(--quota-medium-color);
+}
+
+.statusBad {
+  color: var(--danger-color);
+}
+
+.statusMuted {
+  color: var(--text-tertiary);
+}
+
+.rowAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rowAction:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-tertiary);
+  }
+}
+
+/* Icon-only action (Prioritise): square, same height as the text actions. */
+.rowActionIcon {
+  justify-content: center;
+  width: 24px;
+  padding: 0;
+}
+
+/*
+ * Running "Prioritise plan" burst: "#1 · 11:30 PM ×" (5-hour) or
+ * "⇈ #2 · Sat 7:30 AM ×" (weekly); the full wording is the title.
+ */
+.burstPill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 2px 0 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pillMark {
+  flex: none;
+  color: var(--quota-medium-color);
+}
+
+.burstStop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .burstStop:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--danger-color);
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refresh:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+}
+
+.spinning {
+  animation: quota-row-spin 0.9s linear infinite;
+}
+
+@keyframes quota-row-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- 展开明细 ---------- */
+
+.detail {
+  padding: 4px 16px 14px 46px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron,
+  .fill {
+    transition: none;
+  }
+
+  .skeleton,
+  .spinning {
+    animation: none;
+  }
+}
+
+/* Narrow group: identity · status · refresh on one line, limits below — in every row. */
+@container (width < 772px) {
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+
+  .identity {
+    flex: 1 1 auto;
+  }
+
+  .status,
+  .refresh {
+    flex: none;
+  }
+
+  .status {
+    max-width: 100%;
+  }
+
+  .limits {
+    flex: 1 0 100%;
+    width: 100%;
+    order: 1;
+  }
+}
+
+/* Phone-width group: as many ~130 px columns as fit; equal row widths keep them aligned. */
+@container (max-width: 480px) {
+  .limits {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+}
+
+@include mobile {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto 32px;
+  }
+
+  .identity {
+    grid-column: 1;
+  }
+
+  .limits {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .detail {
+    padding-left: 16px;
+  }
+}

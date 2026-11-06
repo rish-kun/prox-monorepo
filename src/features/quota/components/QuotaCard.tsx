@@ -30,6 +30,12 @@ import styles from './QuotaCard.module.scss';
 /** 额度页全页外衣：QuotaBody 模块绑定成类型化契约（缺键在模块初始化即抛）。 */
 const quotaClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
 
+/** Embedded in an account row, which already lists every limit: hide the duplicated limit rows. */
+const panelQuotaClasses = {
+  ...quotaClasses,
+  quotaRow: `${quotaClasses.quotaRow} ${styles.panelHidden}`,
+};
+
 export type QuotaCardProps = {
   entry: QuotaFileEntry;
   quota?: QuotaCardState;
@@ -38,6 +44,8 @@ export type QuotaCardProps = {
   resetting: boolean;
   /** 首屏级联入场延迟；null = 不入场（切 tab / 翻页 / 刷新新挂载的卡片）。 */
   entranceDelayMs?: number | null;
+  /** Render inside an expanded account row: no card frame, no identity header. */
+  embedded?: boolean;
   onRefresh: () => void;
   onReset: () => void;
 };
@@ -50,6 +58,7 @@ export function QuotaCard(props: QuotaCardProps) {
     canRefresh,
     resetting,
     entranceDelayMs,
+    embedded = false,
     onRefresh,
     onReset,
   } = props;
@@ -89,29 +98,35 @@ export function QuotaCard(props: QuotaCardProps) {
 
   return (
     <article
-      className={`${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`}
-      style={entranceStyle}
+      className={
+        embedded
+          ? styles.panel
+          : `${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`
+      }
+      style={embedded ? undefined : entranceStyle}
     >
-      <header className={styles.head}>
-        <span
-          className={styles.iconWrap}
-          title={typeLabel}
-          style={
-            isThemeSurfaceIconProvider(entry.type)
-              ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
-              : undefined
-          }
-        >
-          {iconSrc ? (
-            <img src={iconSrc} alt="" className={styles.icon} />
-          ) : (
-            <span className={styles.iconFallback}>{typeLabel.slice(0, 1).toUpperCase()}</span>
-          )}
-        </span>
-        <span className={styles.fileName} title={displayName}>
-          {displayName}
-        </span>
-      </header>
+      {!embedded && (
+        <header className={styles.head}>
+          <span
+            className={styles.iconWrap}
+            title={typeLabel}
+            style={
+              isThemeSurfaceIconProvider(entry.type)
+                ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
+                : undefined
+            }
+          >
+            {iconSrc ? (
+              <img src={iconSrc} alt="" className={styles.icon} />
+            ) : (
+              <span className={styles.iconFallback}>{typeLabel.slice(0, 1).toUpperCase()}</span>
+            )}
+          </span>
+          <span className={styles.fileName} title={displayName}>
+            {displayName}
+          </span>
+        </header>
+      )}
 
       <div className={styles.body}>
         {entry.type === 'claude' && status === 'success' && (
@@ -155,7 +170,7 @@ export function QuotaCard(props: QuotaCardProps) {
             {t(`${adapter.i18nPrefix}.load_failed`, { message: errorMessage })}
           </div>
         ) : quota ? (
-          <adapter.Body quota={quota} classes={quotaClasses} />
+          <adapter.Body quota={quota} classes={embedded ? panelQuotaClasses : quotaClasses} />
         ) : (
           <div className={styles.idleHint}>{t(`${adapter.i18nPrefix}.idle`)}</div>
         )}

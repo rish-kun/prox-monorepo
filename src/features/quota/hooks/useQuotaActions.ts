@@ -16,6 +16,7 @@ import { getStatusFromError } from '@/utils/quota';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { enrichQuotaInBackground } from '../quotaEnrichment';
 import { getQuotaMap, getQuotaSetter, type QuotaAdapter, type QuotaCardState } from '../providers';
+import { isRateLimitStatus } from './useQuotaBatchLoader';
 
 const getQuotaState = (adapter: QuotaAdapter, file: AuthFileItem): QuotaCardState | undefined =>
   getQuotaMap(adapter)[getQuotaCacheKey(file)];
@@ -34,6 +35,7 @@ export function useQuotaActions(disableControls: boolean) {
       if (getQuotaState(adapter, file)?.status === 'loading') return;
       const cacheGeneration = captureQuotaCacheGeneration(file.name);
       const setQuota = getQuotaSetter(adapter);
+      const prior = getQuotaState(adapter, file);
 
       setQuota((prev) => ({
         ...prev,
@@ -57,7 +59,10 @@ export function useQuotaActions(disableControls: boolean) {
         commitIfQuotaCacheCurrent(cacheGeneration, () => {
           setQuota((prev) => ({
             ...prev,
-            [cacheKey]: adapter.buildErrorState(message, status),
+            [cacheKey]:
+              isRateLimitStatus(status) && prior?.status === 'success'
+                ? prior
+                : adapter.buildErrorState(message, status),
           }));
           showNotification(
             t('auth_files.quota_refresh_failed', { name: file.name, message }),

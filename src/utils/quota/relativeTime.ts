@@ -124,3 +124,115 @@ export function buildResetDisplay(
     relative: usableMs === null ? null : formatRelativeInstant(usableMs, nowMs, locale),
   };
 }
+
+export interface CompactResetDisplay {
+  /**
+   * When the window resets, as short as stays unambiguous: `23:50` today,
+   * `Thu 06:30` within a week, `Nov 26 06:30` further out. The provider's own
+   * label when no instant is known.
+   */
+  when: string;
+  /** Narrow countdown (`4h`, `5d`, `12m`); null when no instant is known. */
+  relative: string | null;
+  /** Long form for a tooltip: the `buildResetDisplay` pair, e.g. `06/11, 23:50 · in 4 hours`. */
+  full: string;
+}
+
+const compactFormatters = new Map<string, unknown>();
+
+function cachedFormatter<T>(key: string, create: (locale?: string) => T, locale?: string): T {
+  const cacheKey = `${key}|${locale ?? ''}`;
+  const cached = compactFormatters.get(cacheKey);
+  if (cached) return cached as T;
+  let formatter: T;
+  try {
+    formatter = create(locale);
+  } catch {
+    formatter = create(undefined);
+  }
+  compactFormatters.set(cacheKey, formatter);
+  return formatter;
+}
+
+const dateTimeFormatter = (
+  kind: string,
+  options: Intl.DateTimeFormatOptions,
+  locale?: string,
+  timeZone?: string
+) =>
+  cachedFormatter(
+    `${kind}|${timeZone ?? ''}`,
+    (resolved) => new Intl.DateTimeFormat(resolved, { ...options, timeZone }),
+    locale
+  );
+
+/** `23:50`, `Thu 06:30` or `Nov 26 06:30` — 24-hour, like the reset labels the providers bake. */
+export function formatCompactInstant(
+  targetMs: number,
+  nowMs: number,
+  locale?: string,
+  timeZone?: string
+): string {
+  const time = dateTimeFormatter(
+    'time',
+    { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' },
+    locale,
+    timeZone
+  ).format(targetMs);
+  const dayKey = dateTimeFormatter(
+    'day',
+    { year: 'numeric', month: '2-digit', day: '2-digit' },
+    'en-CA',
+    timeZone
+  );
+  if (dayKey.format(targetMs) === dayKey.format(nowMs)) return time;
+  const day =
+    Math.abs(targetMs - nowMs) < 7 * DAY_MS
+      ? dateTimeFormatter('weekday', { weekday: 'short' }, locale, timeZone).format(targetMs)
+      : dateTimeFormatter('date', { month: 'short', day: 'numeric' }, locale, timeZone).format(
+          targetMs
+        );
+  return `${day} ${time}`;
+}
+
+/** `4h`, `5d`, `12m` — the countdown without "in"; past instants keep their "ago". */
+export function formatCompactRelative(targetMs: number, nowMs: number, locale?: string): string {
+  const { value, unit } = relativeTimeParts(targetMs, nowMs);
+  if (value < 0) {
+    return cachedFormatter(
+      'relative-short',
+      (resolved) => new Intl.RelativeTimeFormat(resolved, { style: 'short' }),
+      locale
+    ).format(value, unit);
+  }
+  return cachedFormatter(
+    `unit-${unit}`,
+    (resolved) => new Intl.NumberFormat(resolved, { style: 'unit', unit, unitDisplay: 'narrow' }),
+    locale
+  ).format(value);
+}
+
+/**
+ * The compact reset line of a quota row (`23:50 · 4h`), plus the full wording
+ * for its tooltip. Null when there is nothing worth rendering, like
+ * `buildResetDisplay`.
+ */
+export function buildCompactResetDisplay(
+  absoluteLabel: string | undefined | null,
+  atMs: number | undefined | null,
+  nowMs: number,
+  locale?: string,
+  timeZone?: string
+): CompactResetDisplay | null {
+  const display = buildResetDisplay(absoluteLabel, atMs, nowMs, locale);
+  if (!display) return null;
+  const full = display.relative ? `${display.absolute} · ${display.relative}` : display.absolute;
+  if (typeof atMs !== 'number' || !Number.isFinite(atMs)) {
+    return { when: display.absolute, relative: null, full };
+  }
+  return {
+    when: formatCompactInstant(atMs, nowMs, locale, timeZone),
+    relative: formatCompactRelative(atMs, nowMs, locale),
+    full,
+  };
+}

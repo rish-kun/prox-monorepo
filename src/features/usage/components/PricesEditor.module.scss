@@ -1,0 +1,153 @@
+@use '../../../styles/mixins' as *;
+
+.scroll {
+  overflow-x: auto;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+
+  th,
+  td {
+    padding: 3px 8px 3px 0;
+    text-align: right;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+  }
+
+  th:first-child {
+    padding-left: 12px;
+    text-align: left;
+  }
+
+  thead th {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+  }
+
+  tbody:last-child tr:last-child > * {
+    border-bottom: 0;
+  }
+}
+
+.model {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.hasLong > * {
+  border-bottom-color: transparent !important;
+}
+
+.longLabel {
+  padding-left: 24px !important;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.edited {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--primary-color);
+}
+
+.input {
+  width: 76px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-secondary);
+
+  &:hover {
+    border-color: var(--border-color);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  &::placeholder {
+    color: var(--text-quaternary);
+  }
+}
+
+.addBody > tr > * {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  background: var(--bg-secondary);
+}
+
+.addRow .input {
+  border-color: var(--border-color);
+}
+
+.modelInput {
+  width: 100%;
+  max-width: 240px;
+  text-align: left;
+}
+
+.actions {
+  width: 1%;
+  padding-right: 12px !important;
+}
+
+.link {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .link:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+}

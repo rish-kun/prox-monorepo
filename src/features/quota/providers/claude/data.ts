@@ -13,11 +13,8 @@ import type {
   ClaudeUsageWindow,
   ClaudeUsagePayload,
 } from '@/types';
-import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
+import type { QuotaSnapshot } from '@/services/api';
 import {
-  CLAUDE_PROFILE_URL,
-  CLAUDE_USAGE_URL,
-  CLAUDE_REQUEST_HEADERS,
   CLAUDE_USAGE_WINDOW_KEYS,
   claudePeriodHours,
   normalizeNumberValue,
@@ -25,17 +22,19 @@ import {
   parseClaudeUsagePayload,
   formatQuotaResetTime,
   resolveResetMs,
-  createStatusError,
   isClaudeFile,
   isDisabledAuthFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
+import { isOkResponse, refreshSnapshotFor, requireSnapshotUsage } from '../../snapshotBundle';
 import type { QuotaProviderData } from '../types';
 
 export type ClaudeQuotaData = {
   windows: ClaudeQuotaWindow[];
   extraUsage?: ClaudeExtraUsage | null;
   planType?: string | null;
+  /** The proxy's fetch time for the snapshot this was built from. */
+  fetchedAtMs?: number;
 };
 
 const findFableUsageLimit = (payload: ClaudeUsagePayload) => {
@@ -173,54 +172,42 @@ export const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): st
   return null;
 };
 
+/**
+ * Build quota data from the proxy's snapshot bundle (`usage` + `profile`), the
+ * same parsing the direct `api-call` path used to do.
+ */
+export const buildClaudeQuotaFromSnapshot = (
+  snapshot: QuotaSnapshot,
+  t: TFunction
+): ClaudeQuotaData => {
+  const usage = requireSnapshotUsage(snapshot, t('claude_quota.empty_windows'));
+  const payload = parseClaudeUsagePayload(usage.body ?? usage.bodyText);
+  if (!payload) {
+    throw new Error(t('claude_quota.empty_windows'));
+  }
+
+  const windows = buildClaudeQuotaWindows(payload, t);
+  const profile = snapshot.responses.profile;
+  const planType = isOkResponse(profile)
+    ? resolveClaudePlanType(parseClaudeProfilePayload(profile.body ?? profile.bodyText))
+    : null;
+
+  return {
+    windows,
+    extraUsage: payload.extra_usage,
+    planType,
+    fetchedAtMs: snapshot.fetchedAtMs ?? undefined,
+  };
+};
+
+/** Refresh through the proxy — the panel never calls the Claude usage endpoints itself. */
 const fetchClaudeQuota = async (file: AuthFileItem, t: TFunction): Promise<ClaudeQuotaData> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
     throw new Error(t('claude_quota.missing_auth_index'));
   }
-
-  const [usageResult, profileResult] = await Promise.allSettled([
-    apiCallApi.request({
-      authIndex,
-      method: 'GET',
-      url: CLAUDE_USAGE_URL,
-      header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
-    apiCallApi.request({
-      authIndex,
-      method: 'GET',
-      url: CLAUDE_PROFILE_URL,
-      header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
-  ]);
-
-  if (usageResult.status === 'rejected') {
-    throw usageResult.reason;
-  }
-
-  const result = usageResult.value;
-
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
-  }
-
-  const payload = parseClaudeUsagePayload(result.body ?? result.bodyText);
-  if (!payload) {
-    throw new Error(t('claude_quota.empty_windows'));
-  }
-
-  const windows = buildClaudeQuotaWindows(payload, t);
-  const planType =
-    profileResult.status === 'fulfilled' &&
-    profileResult.value.statusCode >= 200 &&
-    profileResult.value.statusCode < 300
-      ? resolveClaudePlanType(
-          parseClaudeProfilePayload(profileResult.value.body ?? profileResult.value.bodyText)
-        )
-      : null;
-
-  return { windows, extraUsage: payload.extra_usage, planType };
+  return buildClaudeQuotaFromSnapshot(await refreshSnapshotFor(authIndex), t);
 };
 
 export const CLAUDE_CONFIG: QuotaProviderData<ClaudeQuotaState, ClaudeQuotaData> = {
@@ -228,6 +215,7 @@ export const CLAUDE_CONFIG: QuotaProviderData<ClaudeQuotaState, ClaudeQuotaData>
   i18nPrefix: 'claude_quota',
   filterFn: (file) => isClaudeFile(file) && !isDisabledAuthFile(file),
   fetchQuota: fetchClaudeQuota,
+  fromSnapshot: (snapshot, _file, t) => buildClaudeQuotaFromSnapshot(snapshot, t),
   storeSelector: (state) => state.claudeQuota,
   storeSetter: 'setClaudeQuota',
   buildLoadingState: () => ({ status: 'loading', windows: [] }),
@@ -236,6 +224,7 @@ export const CLAUDE_CONFIG: QuotaProviderData<ClaudeQuotaState, ClaudeQuotaData>
     windows: data.windows,
     extraUsage: data.extraUsage,
     planType: data.planType,
+    fetchedAtMs: data.fetchedAtMs,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',

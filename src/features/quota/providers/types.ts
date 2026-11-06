@@ -16,6 +16,7 @@ import type {
   MetaQuotaState,
   XaiQuotaState,
 } from '@/types';
+import type { QuotaSnapshot } from '@/services/api/quotaSnapshots';
 
 export type QuotaUpdater<T> = T | ((prev: T) => T);
 
@@ -46,6 +47,11 @@ export interface QuotaProviderData<TState, TData> {
   i18nPrefix: string;
   filterFn: (file: AuthFileItem) => boolean;
   fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<TData>;
+  /**
+   * Claude / Codex only: build data from a proxy quota snapshot (the proxy is
+   * the only caller of their usage endpoints). Throws the row's error.
+   */
+  fromSnapshot?: (snapshot: QuotaSnapshot, file: AuthFileItem, t: TFunction) => TData;
   /** Optional details loaded only after the primary quota has been committed. */
   enrichQuota?: (file: AuthFileItem, data: TData, t: TFunction) => Promise<TData>;
   resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<TData>;

@@ -308,3 +308,15 @@
     animation: none;
   }
 }
+
+/* 账户行展开后的明细面板：沿用卡片内容，去掉卡片外框。 */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-width: 0;
+}
+
+.panelHidden {
+  display: none !important;
+}

@@ -520,6 +520,12 @@ export interface AuthFileCooldownResetResponse {
   models: string[];
 }
 
+export interface QuotaWindowStartResponse {
+  status: 'ok';
+  auth_index: string;
+  model: string;
+}
+
 export const authFilesApi = {
   list: async (lookup?: AuthFileLookup) =>
     normalizeAuthFilesResponse(
@@ -555,6 +561,10 @@ export const authFilesApi = {
     );
     return normalizeAuthFileRefreshResults(response);
   },
+
+  /** One tiny request through this credential so its rolling 5-hour window starts now. */
+  startQuotaWindow: (authIndex: string) =>
+    apiClient.post<QuotaWindowStartResponse>('/quota/start-window', { auth_index: authIndex }),
 
   resetCooldown: (authIndex: string) =>
     apiClient.post<AuthFileCooldownResetResponse>('/routing/cooldown/reset', {

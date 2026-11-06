@@ -1,0 +1,266 @@
+@use '../../../styles/mixins' as *;
+
+/* Static single-series bars in the dashboard chart's language: neutral ink,
+ * flat tooltip, small radii. Colour is reserved for failures / partial cost. */
+
+.chart {
+  --chart-height: 148px;
+  --bar-max-width: 22px;
+
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bad {
+  color: var(--danger-color);
+}
+
+.partial {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--quota-medium-color);
+}
+
+/* ---------- plot ---------- */
+
+.plot {
+  display: flex;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.yAxis {
+  position: relative;
+  width: 44px;
+  height: var(--chart-height);
+  flex: none;
+
+  @include mobile {
+    width: 36px;
+  }
+}
+
+.yTick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: var(--chart-height);
+}
+
+.gridlines {
+  position: absolute;
+  inset: 0;
+}
+
+.gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-color);
+
+  &:last-child {
+    background: var(--border-hover);
+  }
+}
+
+/* ---------- bars ---------- */
+
+.columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.columnsDense {
+  gap: 1px;
+}
+
+.column {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  max-width: var(--bar-max-width);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-primary) 42%, transparent);
+}
+
+.columnActive .bar {
+  background: color-mix(in srgb, var(--text-primary) 70%, transparent);
+}
+
+.idleTick {
+  display: block;
+  width: 100%;
+  max-width: var(--bar-max-width);
+  height: 1px;
+  background: var(--border-hover);
+}
+
+/* ---------- tooltip ---------- */
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 156px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.tooltipTime {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+
+  b {
+    margin-left: auto;
+    font-family: $font-mono;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+}
+
+/* ---------- x axis ---------- */
+
+.xAxis {
+  position: relative;
+  height: 14px;
+  margin-left: 52px;
+
+  @include mobile {
+    margin-left: 44px;
+  }
+}
+
+.xTick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &:first-child {
+    transform: translateX(-20%);
+  }
+
+  &:last-child:not(:first-child) {
+    transform: translateX(-80%);
+  }
+}
+
+.xTickMinor {
+  @include mobile {
+    display: none;
+  }
+}
+
+/* ---------- data table ---------- */
+
+.tableToggle {
+  font-size: 12px;
+
+  summary {
+    width: fit-content;
+    padding: 2px 4px;
+    margin-left: -4px;
+    border-radius: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 1px;
+    }
+  }
+
+  &[open] summary {
+    margin-bottom: 6px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tableToggle summary:hover {
+    color: var(--text-primary);
+  }
+}
+
+.tableScroll {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+
+  th,
+  td {
+    padding: 4px 8px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary);
+    font-family: inherit;
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+
+  tbody th[scope='row'] {
+    text-align: left;
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+}

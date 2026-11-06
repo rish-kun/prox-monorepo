@@ -183,6 +183,8 @@ export interface ClaudeQuotaState {
   planType?: string | null;
   error?: string;
   errorStatus?: number;
+  /** When the data was fetched upstream (the proxy's poll time), epoch ms. */
+  fetchedAtMs?: number;
 }
 
 // Quota state types
@@ -255,6 +257,8 @@ export interface CodexQuotaState {
   rateLimitResetCreditsError?: string;
   error?: string;
   errorStatus?: number;
+  /** When the data was fetched upstream (the proxy's poll time), epoch ms. */
+  fetchedAtMs?: number;
 }
 
 export interface DevinQuotaWindow {

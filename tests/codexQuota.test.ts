@@ -6,23 +6,35 @@ import {
   normalizeCodexAccountCredits,
 } from '@/features/quota/providers/codex/data';
 import type { CodexQuotaState, CodexUsagePayload } from '@/types';
-import { apiCallApi, type ApiCallRequest, type ApiCallResult } from '@/services/api';
 import {
-  CODEX_RATE_LIMIT_RESET_CREDITS_URL,
-  CODEX_SUBSCRIPTION_URL,
-  CODEX_USAGE_URL,
-  normalizeCodexResetCreditsPayload,
-  parseCodexUsagePayload,
-} from '@/utils/quota';
+  apiCallApi,
+  normalizeSnapshot,
+  quotaSnapshotsApi,
+  type QuotaSnapshotSet,
+} from '@/services/api';
+import { normalizeCodexResetCreditsPayload, parseCodexUsagePayload } from '@/utils/quota';
 
 const t = ((key: string) => key) as TFunction;
 const originalApiCallRequest = apiCallApi.request;
+const originalRefresh = quotaSnapshotsApi.refresh;
 
-const result = (statusCode: number, body: unknown = null): ApiCallResult => ({
-  statusCode,
-  header: {},
-  bodyText: body === null ? '' : JSON.stringify(body),
-  body,
+/** A proxy snapshot with raw upstream responses, as `POST /quota/refresh` returns it. */
+const bundle = (
+  authIndex: string,
+  responses: Record<string, { status_code: number; body: unknown }>
+): QuotaSnapshotSet => ({
+  pollIntervalSeconds: 3600,
+  snapshots: {
+    [authIndex]: normalizeSnapshot({
+      auth_index: authIndex,
+      provider: 'codex',
+      fetched_at: '2026-10-26T10:00:00Z',
+      attempted_at: '2026-10-26T10:00:00Z',
+      responses,
+      error: '',
+      error_status: 0,
+    }),
+  },
 });
 
 const CURRENT_CODEX_USAGE_PAYLOAD: CodexUsagePayload = {
@@ -64,7 +76,15 @@ const CURRENT_CODEX_USAGE_PAYLOAD: CodexUsagePayload = {
 
 afterEach(() => {
   apiCallApi.request = originalApiCallRequest;
+  quotaSnapshotsApi.refresh = originalRefresh;
 });
+
+/** Any direct upstream call from the adapter is a bug: the proxy owns these endpoints. */
+const forbidDirectCalls = () => {
+  apiCallApi.request = async (payload) => {
+    throw new Error(`Unexpected direct upstream call: ${payload.url}`);
+  };
+};
 
 describe('Codex current usage payload', () => {
   test('parses the proxied JSON body and classifies both primary weekly windows', () => {
@@ -134,20 +154,21 @@ describe('Codex account credits', () => {
     });
   });
 
-  test('reads credits from the existing usage request and forwards them into quota state', async () => {
-    const requests: ApiCallRequest[] = [];
-    apiCallApi.request = async (payload) => {
-      requests.push(payload);
-      if (payload.url === CODEX_USAGE_URL) {
-        return result(200, {
-          ...CURRENT_CODEX_USAGE_PAYLOAD,
-          credits: { has_credits: true, unlimited: false, balance: '8.75' },
-        });
-      }
-      if (payload.url === CODEX_RATE_LIMIT_RESET_CREDITS_URL) {
-        return result(200, { available_count: 1, credits: [] });
-      }
-      throw new Error(`Unexpected URL: ${payload.url}`);
+  test('reads credits from the proxy bundle and forwards them into quota state', async () => {
+    forbidDirectCalls();
+    const refreshed: Array<{ indexes?: readonly string[]; force?: boolean }> = [];
+    quotaSnapshotsApi.refresh = async (indexes, options = {}) => {
+      refreshed.push({ indexes, force: options.force });
+      return bundle('codex:1', {
+        usage: {
+          status_code: 200,
+          body: {
+            ...CURRENT_CODEX_USAGE_PAYLOAD,
+            credits: { has_credits: true, unlimited: false, balance: '8.75' },
+          },
+        },
+        reset_credits: { status_code: 200, body: { available_count: 1, credits: [] } },
+      });
     };
 
     const data = await CODEX_CONFIG.fetchQuota(
@@ -158,71 +179,45 @@ describe('Codex account credits', () => {
     expect(state.creditBalance).toBe('8.75');
     expect(state.creditsUnlimited).toBeFalse();
     expect(state.rateLimitResetCreditsAvailableCount).toBe(1);
-    expect(requests.filter((request) => request.url === CODEX_USAGE_URL)).toHaveLength(1);
+    expect(state.fetchedAtMs).toBe(Date.parse('2026-10-26T10:00:00Z'));
+    expect(refreshed).toEqual([{ indexes: ['codex:1'], force: undefined }]);
   });
 });
 
 describe('Codex live subscription renewal', () => {
-  test('prefers the live active_until and sends the encoded account ID', async () => {
-    const requests: ApiCallRequest[] = [];
-    apiCallApi.request = async (payload) => {
-      requests.push(payload);
-      if (payload.url === CODEX_USAGE_URL) return result(200, CURRENT_CODEX_USAGE_PAYLOAD);
-      if (payload.url === CODEX_RATE_LIMIT_RESET_CREDITS_URL) {
-        return result(200, { available_count: 0, credits: [] });
-      }
-      if (payload.url.startsWith(CODEX_SUBSCRIPTION_URL)) {
-        return result(200, { active_until: '2026-10-03T13:27:01Z' });
-      }
-      throw new Error(`Unexpected URL: ${payload.url}`);
-    };
+  const file = {
+    name: 'codex.json',
+    type: 'codex',
+    auth_index: 'codex:1',
+    chatgpt_subscription_active_until: '2026-09-03T13:27:01Z',
+  };
 
-    const quota = await CODEX_CONFIG.fetchQuota(
-      {
-        name: 'codex.json',
-        type: 'codex',
-        auth_index: 'codex:1',
-        metadata: { chatgpt_account_id: 'account/id + space' },
-        chatgpt_subscription_active_until: '2026-09-03T13:27:01Z',
-      },
-      t
-    );
+  test('prefers the subscription response stored in the bundle', async () => {
+    forbidDirectCalls();
+    quotaSnapshotsApi.refresh = async () =>
+      bundle('codex:1', {
+        usage: { status_code: 200, body: JSON.stringify(CURRENT_CODEX_USAGE_PAYLOAD) },
+        subscription: { status_code: 200, body: { active_until: '2026-10-03T13:27:01Z' } },
+      });
 
+    const quota = await CODEX_CONFIG.fetchQuota(file, t);
     expect(quota.subscriptionActiveUntil).toBe('2026-10-03T13:27:01Z');
-    const subscriptionRequest = requests.find((request) =>
-      request.url.startsWith(CODEX_SUBSCRIPTION_URL)
-    );
-    expect(subscriptionRequest?.url).toBe(
-      `${CODEX_SUBSCRIPTION_URL}?account_id=account%2Fid%20%2B%20space`
-    );
-    expect(subscriptionRequest?.authIndex).toBe('codex:1');
-    expect(subscriptionRequest?.header?.Authorization).toBe('Bearer $TOKEN$');
-    expect(subscriptionRequest?.header?.['Chatgpt-Account-Id']).toBe('account/id + space');
+    expect(quota.windows.map(({ id }) => id)).toEqual(['weekly', 'gpt-5-3-codex-spark-weekly-0']);
   });
 
-  test('falls back to the credential date when the subscription probe fails', async () => {
-    apiCallApi.request = async (payload) => {
-      if (payload.url === CODEX_USAGE_URL) return result(200, CURRENT_CODEX_USAGE_PAYLOAD);
-      if (payload.url === CODEX_RATE_LIMIT_RESET_CREDITS_URL) {
-        return result(200, { available_count: 0, credits: [] });
-      }
-      if (payload.url.startsWith(CODEX_SUBSCRIPTION_URL)) {
-        return result(503, { error: 'temporarily unavailable' });
-      }
-      throw new Error(`Unexpected URL: ${payload.url}`);
-    };
+  test('falls back to the credential date when the subscription probe failed', async () => {
+    forbidDirectCalls();
+    quotaSnapshotsApi.refresh = async () =>
+      bundle('codex:1', {
+        usage: { status_code: 200, body: CURRENT_CODEX_USAGE_PAYLOAD },
+        subscription: { status_code: 503, body: { error: 'temporarily unavailable' } },
+        reset_credits: { status_code: 500, body: 'upstream exploded' },
+      });
 
-    const quota = await CODEX_CONFIG.fetchQuota(
-      {
-        name: 'codex.json',
-        type: 'codex',
-        auth_index: 'codex:2',
-        chatgpt_account_id: 'account-2',
-        chatgpt_subscription_active_until: '2026-09-03T13:27:01Z',
-      },
-      t
-    );
-
+    const quota = await CODEX_CONFIG.fetchQuota(file, t);
     expect(quota.subscriptionActiveUntil).toBe('2026-09-03T13:27:01Z');
+    expect(quota.rateLimitResetCreditsError).toBe('500 upstream exploded');
+    // The usage payload's own reset-credit summary still applies.
+    expect(quota.rateLimitResetCreditsAvailableCount).toBe(1);
   });
 });

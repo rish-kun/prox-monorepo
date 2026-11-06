@@ -87,7 +87,7 @@ describe('span boundaries', () => {
     const session = timelineSpan('session', 0, now);
     const sessionNext = timelineSpan('session', 1, now);
     expect(Math.round((sessionNext.startMs - session.startMs) / DAY_MS)).toBe(1);
-    expect(session.days).toBe(3);
+    expect(session.days).toBe(1);
   });
 
   test('spans a whole number of days even across a DST transition', () => {
