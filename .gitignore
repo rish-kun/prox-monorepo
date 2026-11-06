@@ -1,0 +1,4 @@
+/proxy/cli-proxy-api
+/panel/dist/
+/panel/node_modules/
+.DS_Store
