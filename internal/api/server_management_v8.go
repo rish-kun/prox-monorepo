@@ -30,6 +30,13 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/server/latest-version", s.mgmt.GetLatestVersion)
 	v8.POST("/requests/api-call", s.mgmt.APICall)
 	v8.POST("/routing/cooldown/reset", s.mgmt.ResetQuota)
+	v8.POST("/quota/start-window", s.mgmt.StartQuotaWindow)
+	v8.GET("/quota/snapshots", s.mgmt.GetQuotaSnapshots)
+	v8.POST("/quota/refresh", s.mgmt.RefreshQuota)
+	v8.GET("/quota/history", s.mgmt.GetQuotaHistory)
+	v8.GET("/quota/burst", s.mgmt.GetQuotaBursts)
+	v8.POST("/quota/burst", s.mgmt.PrioritiseQuotaBurst)
+	v8.DELETE("/quota/burst", s.mgmt.CancelQuotaBurst)
 	v8.GET("/routing/model-definitions/:channel", s.mgmt.GetStaticModelDefinitions)
 
 	v8.GET("/observability/logs", s.mgmt.GetLogs)
@@ -39,6 +46,7 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/observability/logs/requests/:id", s.mgmt.GetRequestLogByID)
 	v8.GET("/observability/usage/api-keys", s.mgmt.GetAPIKeyUsage)
 	v8.GET("/observability/usage/queue", s.mgmt.GetUsageQueue)
+	v8.GET("/usage/summary", s.mgmt.GetUsageSummary)
 
 	v8.GET("/credentials", s.mgmt.ListAuthFiles)
 	v8.POST("/credentials", s.mgmt.UploadAuthFile)

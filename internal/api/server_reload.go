@@ -199,6 +199,7 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 		s.mgmt.SetConfig(cfg)
 		s.mgmt.SetAuthManager(s.handlers.AuthManager)
 		s.mgmt.SetPluginHost(s.pluginHost)
+		s.mgmt.SetModelExecutor(s.handlers)
 	}
 	s.refreshPluginManagementRoutes()
 

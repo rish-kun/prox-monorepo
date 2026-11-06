@@ -26,6 +26,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/managementasset"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/quotapoll"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/redisqueue"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
@@ -84,6 +85,9 @@ type Server struct {
 
 	// management handler
 	mgmt *managementHandlers.Handler
+
+	// quotaPoll owns Claude/Codex usage polling and quota history.
+	quotaPoll *quotapoll.Service
 
 	// pluginHost owns dynamic plugin Management API route dispatch.
 	pluginHost *pluginhost.Host
@@ -213,7 +217,16 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 	// Initialize management handler
 	s.mgmt = managementHandlers.NewHandler(cfg, configFilePath, authManager)
 	s.mgmt.SetPluginHost(optionState.pluginHost)
+	s.mgmt.SetModelExecutor(s.handlers)
 	s.mgmt.SetConfigReloadHook(optionState.configReloadHook)
+	s.quotaPoll = quotapoll.New(quotapoll.Options{
+		Fetcher: s.mgmt.QuotaPollFetcher(),
+		Auths:   s.mgmt.QuotaPollAuths,
+		Dir:     quotapoll.DirForConfig(configFilePath),
+
+		ApplyPriorityOverrides: s.mgmt.ApplyRoutingPriorityOverrides,
+	})
+	s.mgmt.SetQuotaPoll(s.quotaPoll)
 	if optionState.localPassword != "" {
 		s.mgmt.SetLocalPassword(optionState.localPassword)
 	}
@@ -330,6 +343,9 @@ func (s *Server) Start() error {
 		log.Debugf("Starting API server on %s", addr)
 	}
 
+	// The quota poller runs with the server and is closed (flushed) by Stop.
+	s.quotaPoll.Start(context.Background())
+
 	httpListener := newMuxListener(listener.Addr(), 1024)
 	s.listenerMu.Lock()
 	s.muxBaseListener = listener
@@ -443,6 +459,11 @@ func (s *Server) Stop(ctx context.Context) error {
 	}
 	if s.codexLiveHandler != nil {
 		s.codexLiveHandler.Close()
+	}
+	if s.quotaPoll != nil {
+		if errCloseQuota := s.quotaPoll.Close(); errCloseQuota != nil {
+			log.WithError(errCloseQuota).Error("failed to flush quota history on shutdown")
+		}
 	}
 	if errCloseServer != nil {
 		return fmt.Errorf("failed to shutdown HTTP server: %v", errCloseServer)

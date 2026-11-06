@@ -326,6 +326,36 @@ func (s *authScheduler) upsertAuthResult(auth *Auth, targetModels []string, cred
 	s.upsertAuthResultLocked(auth, targetModels, credentialScoped, time.Now())
 }
 
+// refreshPriorities recomputes the effective priority of the given auths and rebuilds the
+// priority buckets of every model shard they belong to. Generations and cooldown state are
+// left untouched, so this is safe to run concurrently with request results.
+func (s *authScheduler) refreshPriorities(authIDs []string) {
+	if s == nil || len(authIDs) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	for _, authID := range authIDs {
+		authID = strings.TrimSpace(authID)
+		providerState := s.providers[s.authProviders[authID]]
+		if providerState == nil {
+			continue
+		}
+		meta := providerState.auths[authID]
+		if meta == nil || meta.auth == nil {
+			continue
+		}
+		priority := authPriority(meta.auth)
+		if priority == meta.priority {
+			continue
+		}
+		updated := *meta
+		updated.priority = priority
+		providerState.upsertAuthForModelsLocked(&updated, nil, true, now)
+	}
+}
+
 // RecordRemovalTombstone records a removal tombstone with the specified epoch and cleans up provider shards.
 func (s *authScheduler) RecordRemovalTombstone(authID string, tombstoneEpoch uint64) {
 	if s == nil {

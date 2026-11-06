@@ -83,6 +83,7 @@ const (
 type modelCooldownError struct {
 	model    string
 	resetIn  time.Duration
+	resetAt  time.Time
 	provider string
 	cause    error
 }
@@ -104,6 +105,7 @@ func newModelCooldownErrorWithCause(model, provider string, resetIn time.Duratio
 		model:    model,
 		provider: provider,
 		resetIn:  resetIn,
+		resetAt:  time.Now().Add(resetIn),
 		cause:    cause,
 	}
 }
@@ -120,6 +122,9 @@ func (e *modelCooldownError) Unwrap() error {
 }
 
 func (e *modelCooldownError) Error() string {
+	if e.isUsageLimit() {
+		return e.usageLimitBody()
+	}
 	modelName := e.model
 	if modelName == "" {
 		modelName = "requested model"
@@ -361,8 +366,16 @@ func (e *modelCooldownError) Headers() http.Header {
 	return headers
 }
 
+// authPriority returns the effective routing priority of an auth: a registered priority
+// override (see SetPriorityOverrides) when present, otherwise the "priority" attribute.
 func authPriority(auth *Auth) int {
-	if auth == nil || auth.Attributes == nil {
+	if auth == nil {
+		return 0
+	}
+	if priority, ok := priorityOverride(auth.ID); ok {
+		return priority
+	}
+	if auth.Attributes == nil {
 		return 0
 	}
 	raw := strings.TrimSpace(auth.Attributes["priority"])
@@ -608,6 +621,27 @@ func highestPriorityAuths(auths []*Auth) []*Auth {
 		}
 	}
 	return highest
+}
+
+// sessionBindingCandidates returns the candidates an existing session binding may keep.
+// Normally a binding may reuse any available credential across priority tiers. While a
+// credential with a routing priority override (a prioritised burst) is ready, bindings
+// yield to priority routing instead: only the highest ready tier may be reused, so open
+// sessions move to the prioritised credential and are rebound to it.
+func sessionBindingCandidates(available, highest []*Auth) []*Auth {
+	current := priorityOverrides.Load()
+	if current == nil || len(*current) == 0 {
+		return available
+	}
+	for _, auth := range available {
+		if auth == nil {
+			continue
+		}
+		if _, ok := (*current)[auth.ID]; ok {
+			return highest
+		}
+	}
+	return available
 }
 
 // Pick selects the next available auth for the provider in a round-robin manner.
@@ -1034,6 +1068,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		return nil, err
 	}
 	fallbackAuths := highestPriorityAuths(available)
+	bindable := sessionBindingCandidates(available, fallbackAuths)
 
 	modelKey := canonicalModelKey(model)
 	cacheKey := provider + "::" + primaryID + "::" + modelKey
@@ -1057,7 +1092,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	}
 
 	if cachedAuthID, ok := s.cache.GetAndRefresh(cacheKey); ok {
-		for _, auth := range available {
+		for _, auth := range bindable {
 			if auth.ID == cachedAuthID {
 				bind(auth.ID)
 				entry.Infof("session-affinity: cache hit | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
@@ -1079,7 +1114,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 
 	if fallbackKey != "" {
 		if cachedAuthID, ok := s.cache.Get(fallbackKey); ok {
-			for _, auth := range available {
+			for _, auth := range bindable {
 				if auth.ID == cachedAuthID {
 					if !isSubagent || s.subagentAffinity {
 						bind(auth.ID)
@@ -1143,8 +1178,9 @@ func (s *SessionAffinitySelector) pickLCP(ctx context.Context, provider, model s
 		return nil, true, errAvailable
 	}
 
+	fallbackAuths := highestPriorityAuths(available)
 	if match, ok := s.matcher.MatchFingerprintsWithContext(namespace, fingerprints, tailFingerprints, envDigest, minPrefixLength); ok {
-		for _, auth := range available {
+		for _, auth := range sessionBindingCandidates(available, fallbackAuths) {
 			if auth == nil || auth.ID != match.AuthID {
 				continue
 			}
@@ -1186,7 +1222,6 @@ func (s *SessionAffinitySelector) pickLCP(ctx context.Context, provider, model s
 		}
 	}
 
-	fallbackAuths := highestPriorityAuths(available)
 	auth, errPick := s.fallback.Pick(ctx, provider, model, opts, fallbackAuths)
 	if errPick != nil {
 		return nil, true, errPick

@@ -209,10 +209,7 @@ func (h *Handler) APICall(c *gin.Context) {
 		req.Host = hostOverride
 	}
 
-	httpClient := &http.Client{
-		Timeout: defaultAPICallTimeout,
-	}
-	httpClient.Transport = h.apiCallTransport(auth, requestProxyURL)
+	httpClient := h.apiCallHTTPClient(auth, requestProxyURL)
 
 	resp, errDo := httpClient.Do(req)
 	if errDo != nil {
@@ -237,6 +234,16 @@ func (h *Handler) APICall(c *gin.Context) {
 		Header:     resp.Header,
 		Body:       string(respBody),
 	})
+}
+
+// apiCallHTTPClient builds the HTTP client used for management upstream calls
+// (APICall and the quota poller): the APICall timeout and the credential's
+// proxy transport.
+func (h *Handler) apiCallHTTPClient(auth *coreauth.Auth, requestProxyURL string) *http.Client {
+	return &http.Client{
+		Timeout:   defaultAPICallTimeout,
+		Transport: h.apiCallTransport(auth, requestProxyURL),
+	}
 }
 
 func firstNonEmptyString(values ...*string) string {
