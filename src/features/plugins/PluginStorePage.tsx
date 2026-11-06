@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { PageToolbarSlot } from '@/components/layout/PageToolbar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -986,9 +987,12 @@ export function PluginStorePage() {
   return (
     <div className={styles.page}>
       {/* ── Page Header ── */}
-      <div className={styles.pageHeader}>
-        <h1 className={styles.title}>{t('plugin_store.title')}</h1>
-        <p className={styles.description}>{t('plugin_store.description')}</p>
+      <div className={styles.pageHeaderRow}>
+        <div className={styles.pageHeader}>
+          <h1 className={styles.title}>{t('plugin_store.title')}</h1>
+          <p className={styles.description}>{t('plugin_store.description')}</p>
+        </div>
+        <PageToolbarSlot />
       </div>
 
       {/* ── Security Banner ── */}

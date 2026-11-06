@@ -2,6 +2,7 @@ import { forwardRef, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { IconChevronLeft } from '@/components/ui/icons';
+import { PageToolbarSlot } from '@/components/layout/PageToolbar';
 import styles from './SecondaryScreenShell.module.scss';
 
 export type SecondaryScreenShellProps = {
@@ -62,7 +63,10 @@ export const SecondaryScreenShell = forwardRef<HTMLDivElement, SecondaryScreenSh
           <div className={styles.topBarTitle} title={titleTooltip}>
             {title}
           </div>
-          <div className={styles.rightSlot}>{rightAction}</div>
+          <div className={styles.rightSlot}>
+            {rightAction}
+            <PageToolbarSlot />
+          </div>
         </div>
 
         {isLoading ? (

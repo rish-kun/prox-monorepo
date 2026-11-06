@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useRevealGroup } from '@/hooks/motion';
-import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { UnsavedChangesGuard } from '@/components/common/UnsavedChangesGuard';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
 import {
@@ -125,12 +125,6 @@ export function ConfigPage() {
     }),
     [t]
   );
-
-  useUnsavedChangesGuard({
-    enabled: isCurrentLayer,
-    shouldBlock: doc.isDirty,
-    dialog: unsavedChangesDialog,
-  });
 
   // YAML 解析失败：切换到源码模式；修复后仍可重试进入可视化模式。
   useEffect(() => {
@@ -301,6 +295,9 @@ export function ConfigPage() {
 
   return (
     <div className={styles.page} ref={revealRef}>
+      {isCurrentLayer && doc.isDirty && (
+        <UnsavedChangesGuard shouldBlock dialog={unsavedChangesDialog} />
+      )}
       <ConfigHeader
         meta={headerMeta}
         reloadDisabled={doc.loading || doc.saving}

@@ -25,11 +25,20 @@
   color: var(--text-secondary);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  min-width: 0;
+  margin: 0 0 $spacing-xl 0;
+}
+
 .pageTitle {
   font-size: 28px;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 $spacing-xl 0;
+  margin: 0;
 }
 
 .content {

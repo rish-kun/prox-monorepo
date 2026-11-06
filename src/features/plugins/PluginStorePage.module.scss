@@ -12,10 +12,19 @@
 
 // ─── Header ─────────────────────────────────────────────
 
+.pageHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+  min-width: 0;
+}
+
 .pageHeader {
   display: flex;
   flex-direction: column;
   gap: $spacing-sm;
+  min-width: 0;
 }
 
 .title {

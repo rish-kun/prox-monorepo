@@ -1,7 +1,9 @@
 @use './variables.scss' as *;
 
 :root {
-  --header-height: 80px;
+  // Height of the fixed top bar that overlays content. Desktop has none (the toolbar sits in
+  // the page header row); mobile overrides this below.
+  --header-height: 0px;
   --shell-gutter: 24px;
   --sidebar-panel-width: 216px;
   --sidebar-collapsed-width: 60px;
@@ -42,7 +44,9 @@
   }
 }
 
+// Fade behind the fixed mobile top bar; desktop has no overlaying header, so it is hidden.
 .top-gradient-blur {
+  display: none;
   position: fixed;
   top: 0;
   right: 0;
@@ -52,7 +56,7 @@
   pointer-events: none;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--bg-secondary) 88%, #0d0c0a) 0%,
+    color-mix(in srgb, var(--bg-secondary) 88%, #000000) 0%,
     color-mix(in srgb, var(--bg-secondary) 54%, transparent) 36%,
     color-mix(in srgb, var(--bg-secondary) 22%, transparent) 66%,
     transparent 100%
@@ -79,131 +83,54 @@
   transition: left $transition-normal;
 }
 
-.main-header {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: $z-dropdown + 1;
-  height: var(--header-height);
-  pointer-events: none;
-  background: transparent;
-  border: 0;
-
-  .sidebar-toggle-floating {
-    position: fixed;
-    top: 50%;
-    left: calc(var(--sidebar-active-width) - 12px);
-    width: 24px;
-    height: 52px;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
-    border-radius: 14px;
-    background: var(--bg-primary);
-    color: color-mix(in srgb, var(--text-secondary) 88%, transparent);
-    box-shadow:
-      4px 0 14px rgb(0 0 0 / 0.18),
-      inset 0 1px 0 rgb(255 255 255 / 0.03);
-    cursor: pointer;
-    pointer-events: auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transform: translateY(-50%);
-    transition:
-      background $transition-fast,
-      border-color $transition-fast,
-      color $transition-fast,
-      transform $transition-fast,
-      left $transition-normal;
-
-    svg {
-      width: 14px;
-      height: 14px;
-    }
-
-    &:hover {
-      background: color-mix(in srgb, var(--bg-primary) 90%, var(--text-primary) 10%);
-      border-color: color-mix(in srgb, var(--border-hover) 86%, transparent);
-      color: var(--text-primary);
-      transform: translateY(-50%) translateX(2px);
-    }
-
-    &:active {
-      transform: translateY(-50%) translateX(0);
-    }
-
-    &:focus-visible {
-      outline: none;
-      box-shadow:
-        0 0 0 2px color-mix(in srgb, var(--primary-color) 24%, transparent),
-        4px 0 14px rgb(0 0 0 / 0.18);
-    }
-  }
-
+// App toolbar (refresh / language / theme / logout). Desktop: in-flow in the current
+// page's header row, so it scrolls with the page and never covers content.
+.app-shell {
   .mobile-sidebar-actions,
   .header-actions {
-    position: absolute;
-    top: var(--shell-gutter);
     display: inline-flex;
+    flex: none;
     align-items: center;
-    gap: 4px;
-    padding: 6px;
+    gap: 2px;
+    padding: 3px;
     border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
-    border-radius: 16px;
+    border-radius: 11px;
     background: color-mix(in srgb, var(--bg-primary) 68%, transparent);
     color: var(--text-secondary);
-    box-shadow:
-      0 18px 44px rgb(0 0 0 / 0.17),
-      inset 0 1px 0 rgb(255 255 255 / 0.04);
-    --glass-blur: 16px;
-    backdrop-filter: var(--glass-backdrop-filter);
-    -webkit-backdrop-filter: var(--glass-backdrop-filter);
     pointer-events: auto;
-  }
 
-  .mobile-sidebar-actions {
-    left: var(--shell-gutter);
-    display: none;
-  }
-
-  .header-actions {
-    right: var(--shell-gutter);
-  }
-
-  .mobile-sidebar-actions .btn,
-  .header-actions .btn {
-    width: var(--floating-control-size);
-    height: var(--floating-control-size);
-    min-width: var(--floating-control-size);
-    padding: 0;
-    border-radius: 11px;
-    background: transparent;
-    color: var(--text-secondary);
-    border-color: transparent;
-
-    > span {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 0;
-    }
-
-    &:hover {
-      background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-      color: var(--text-primary);
+    .btn {
+      width: 30px;
+      height: 30px;
+      min-width: 30px;
+      padding: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-secondary);
       border-color: transparent;
+
+      > span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 0;
+      }
+
+      &:hover {
+        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+        color: var(--text-primary);
+        border-color: transparent;
+      }
+
+      &:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 26%, transparent);
+      }
     }
 
-    &:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 26%, transparent);
+    svg {
+      display: block;
     }
-  }
-
-  .mobile-menu-btn {
-    display: none;
-    flex-shrink: 0;
   }
 
   .language-menu,
@@ -358,9 +285,128 @@
     font-weight: 500;
     white-space: nowrap;
   }
+}
 
-  svg {
-    display: block;
+.page-toolbar-slot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  // A little more air than the page's own action gap, so the app controls read as a group.
+  padding-left: 6px;
+
+  &:empty {
+    display: none;
+  }
+}
+
+// Pages without a header slot (dashboard, plugin pages): a right-aligned row above the page.
+.page-toolbar-fallback {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.main-header {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: $z-dropdown + 1;
+  height: var(--header-height);
+  pointer-events: none;
+  background: transparent;
+  border: 0;
+
+  .sidebar-toggle-floating {
+    position: fixed;
+    top: 50%;
+    left: calc(var(--sidebar-active-width) - 12px);
+    width: 24px;
+    height: 52px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+    border-radius: 14px;
+    background: var(--bg-primary);
+    color: color-mix(in srgb, var(--text-secondary) 88%, transparent);
+    box-shadow:
+      4px 0 14px rgb(0 0 0 / 0.18),
+      inset 0 1px 0 rgb(255 255 255 / 0.03);
+    cursor: pointer;
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateY(-50%);
+    transition:
+      background $transition-fast,
+      border-color $transition-fast,
+      color $transition-fast,
+      transform $transition-fast,
+      left $transition-normal;
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--bg-primary) 90%, var(--text-primary) 10%);
+      border-color: color-mix(in srgb, var(--border-hover) 86%, transparent);
+      color: var(--text-primary);
+      transform: translateY(-50%) translateX(2px);
+    }
+
+    &:active {
+      transform: translateY(-50%) translateX(0);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--primary-color) 24%, transparent),
+        4px 0 14px rgb(0 0 0 / 0.18);
+    }
+  }
+
+  // Mobile only: the toolbar is pinned in this fixed bar beside the menu button.
+  // On desktop it is portaled into the page header row (see .page-toolbar-slot).
+  .mobile-sidebar-actions,
+  .header-actions {
+    position: absolute;
+    top: var(--shell-gutter);
+    gap: 4px;
+    padding: 6px;
+    border-radius: 16px;
+    box-shadow:
+      0 18px 44px rgb(0 0 0 / 0.17),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+    --glass-blur: 16px;
+    backdrop-filter: var(--glass-backdrop-filter);
+    -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  }
+
+  .mobile-sidebar-actions {
+    left: var(--shell-gutter);
+    display: none;
+  }
+
+  .header-actions {
+    right: var(--shell-gutter);
+  }
+
+  .mobile-sidebar-actions .btn,
+  .header-actions .btn {
+    width: var(--floating-control-size);
+    height: var(--floating-control-size);
+    min-width: var(--floating-control-size);
+    border-radius: 11px;
+  }
+
+  .mobile-menu-btn {
+    display: none;
+    flex-shrink: 0;
   }
 }
 
@@ -403,7 +449,7 @@
   gap: $spacing-sm;
   flex-shrink: 0;
   overflow-y: auto;
-  background: var(--bg-primary);
+  background: var(--sidebar-bg, var(--bg-primary));
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
   border-radius: 0;
@@ -807,7 +853,7 @@
 .main-content {
   flex: 1 0 auto;
   min-height: 100%;
-  padding: 70px clamp(20px, 3vw, 48px) 40px;
+  padding: 24px clamp(20px, 3vw, 48px) 40px;
   display: flex;
   flex-direction: column;
   gap: $spacing-lg;
@@ -816,7 +862,7 @@
   &.main-content-logs {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 70px clamp(20px, 3vw, 48px) 24px;
+    padding: 24px clamp(20px, 3vw, 48px) 24px;
     overflow: hidden;
   }
 
@@ -827,6 +873,11 @@
     gap: 0;
     overflow: hidden;
     background: var(--bg-secondary);
+
+    // Full-bleed iframe: the toolbar gets its own slim row above the frame instead of covering it.
+    .page-toolbar-fallback {
+      padding: 8px clamp(20px, 3vw, 48px);
+    }
 
     .page-transition,
     .page-transition__layer {
@@ -846,6 +897,7 @@
   }
 
   .top-gradient-blur {
+    display: block;
     height: 114px;
   }
 
@@ -942,7 +994,7 @@
     width: var(--sidebar-panel-width);
     height: auto;
     transform: translateX(calc(-100% - 24px));
-    background: var(--bg-primary);
+    background: var(--sidebar-bg, var(--bg-primary));
     border: 0;
     border-right: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
     border-radius: 0;

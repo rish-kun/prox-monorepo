@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useReducer, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PageToolbarSlot } from '@/components/layout/PageToolbar';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -422,6 +423,7 @@ export function LogsPage() {
             {t('logs.error_logs_modal_title')}
           </button>
         </div>
+        <PageToolbarSlot />
       </header>
 
       <div className={styles.content}>

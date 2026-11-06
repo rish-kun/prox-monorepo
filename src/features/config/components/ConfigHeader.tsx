@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PageToolbarSlot } from '@/components/layout/PageToolbar';
 import { IconRefreshCw } from '@/components/ui/icons';
 import type { HeaderMetaSegment } from '../uiState';
 import styles from './ConfigHeader.module.scss';
@@ -67,6 +68,7 @@ export function ConfigHeader({
           <IconRefreshCw size={14} className={reloading ? styles.spinning : undefined} />
           {t('config_management.reload')}
         </button>
+        <PageToolbarSlot />
       </div>
     </header>
   );
