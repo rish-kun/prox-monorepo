@@ -1,0 +1,322 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Grouped rows: the quota page's visual language, shared.
+ * Bordered group (12px radius, the only rounding at group level) with a
+ * one-line secondary-background header; flat rows separated by 1px rules.
+ * No shadows, no hover lift, no pill cards. Telemetry is mono + tabular.
+ * ============================================================ */
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+
+.headIcon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+
+  img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+/* ---------- rows ---------- */
+
+.item {
+  border-bottom: 1px solid var(--border-color);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.itemDimmed {
+  opacity: 0.5;
+}
+
+.row {
+  display: grid;
+  /* Pages set --row-cols for the cells after the identity column. */
+  grid-template-columns: minmax(200px, var(--row-identity, 310px)) var(
+      --row-cols,
+      minmax(0, 1fr)
+    ) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 9px 12px;
+  min-width: 0;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+
+  > span {
+    min-width: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .identity:hover {
+    background: var(--bg-secondary);
+  }
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-tertiary);
+  transform: rotate(-90deg);
+  transition: transform $transition-fast;
+}
+
+.chevronOpen {
+  transform: none;
+}
+
+.trailing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.detail {
+  padding: 12px 16px 14px 46px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+/* ---------- shared atoms ---------- */
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-hover);
+}
+
+.dotOk {
+  background: var(--viz-success);
+}
+
+.dotWarn {
+  background: var(--quota-medium-color);
+}
+
+.dotBad {
+  background: var(--viz-failure);
+}
+
+.squares {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.square {
+  width: 9px;
+  height: 9px;
+  border-radius: 2.5px;
+  background: var(--border-hover);
+}
+
+.chip {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.mono {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--text-tertiary);
+}
+
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Square icon button (refresh, add…) — 30px, 8px radius, quiet until hover. */
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+/* Text action inside an expanded detail (Edit, Delete…): flat, 6px radius. */
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+.danger {
+  color: var(--danger-color);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .iconButton:hover:not(:disabled),
+  .textButton:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .danger:hover:not(:disabled) {
+    color: var(--danger-color);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* Desktop: the cells join the row grid directly (columns from --row-cols). */
+.cells {
+  display: contents;
+}
+
+@include mobile {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  /* Phone: identity + trailing on line 1, the cells wrap together on line 2. */
+  .cells {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  .detail {
+    padding-left: 16px;
+  }
+}

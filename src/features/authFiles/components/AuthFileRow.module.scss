@@ -1,0 +1,184 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Credential row cells. The row grid itself comes from GroupedRows;
+ * this module only lays out the page-specific cells and the detail.
+ * Trailing controls have a fixed width so every row's columns align.
+ * ============================================================ */
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mono {
+  font-family: $font-mono;
+  font-size: 12px;
+}
+
+/* Disabled credentials: dim the content, keep checkbox/toggle clear. */
+.rowDisabled {
+  opacity: 0.5;
+}
+
+.selectionSpacer {
+  flex: none;
+  width: 22px;
+}
+
+/* ---------- cells ---------- */
+
+.cells {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(76px, auto) minmax(64px, auto)
+    minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.fileName {
+  font-family: $font-mono;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.note {
+  color: var(--text-tertiary);
+}
+
+.counts,
+.policy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.countOk {
+  color: var(--viz-success);
+}
+
+.countFail {
+  color: var(--viz-failure);
+}
+
+.status {
+  text-align: right;
+}
+
+.statusBad {
+  color: var(--danger-color);
+}
+
+.statusWarn {
+  color: var(--quota-medium-color);
+}
+
+.statusMuted {
+  color: var(--text-tertiary);
+}
+
+/* ---------- trailing ---------- */
+
+.trailing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 84px;
+}
+
+.trailingSpacer {
+  width: 30px;
+}
+
+.toggleSpacer {
+  width: 44px;
+}
+
+/* ---------- expanded detail ---------- */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-family: $font-mono;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.metaFile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.detailNote {
+  display: none;
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.warning {
+  margin: 0;
+  color: var(--danger-color);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Phone: identity + toggle on line 1, metrics wrap to line 2,
+ * filename/note live in the detail. */
+@include mobile {
+  .cells {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding-left: 30px;
+  }
+
+  .fileName,
+  .note {
+    display: none;
+  }
+
+  .policy:empty {
+    display: none;
+  }
+
+  .status {
+    flex: 1 1 120px;
+    text-align: left;
+  }
+
+  .status:empty {
+    display: none;
+  }
+
+  .detailNote {
+    display: block;
+  }
+}

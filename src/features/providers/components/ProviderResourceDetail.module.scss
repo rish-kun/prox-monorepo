@@ -1,0 +1,142 @@
+@use '../../../styles/mixins' as *;
+
+/* Expanded entry: flat key/value grid, label-over-list sections, text actions.
+ * Sits on the shared detail panel (secondary background); no cards. */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.label,
+.sectionTitle {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.value {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nameChip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: $font-mono;
+}
+
+.none {
+  font-size: 12px;
+}
+
+/* Endpoint and key-entry lists: flat lines divided by 1px rules. */
+.lines {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border-color);
+}
+
+.line,
+.keyLine {
+  display: grid;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.line {
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr);
+}
+
+.keyLine {
+  grid-template-columns: 20px minmax(0, 220px) minmax(0, 1fr) auto;
+}
+
+.lineLabel {
+  color: var(--text-secondary);
+}
+
+.lineValue {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.keyStats {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.success {
+  color: var(--viz-success);
+}
+
+.failure {
+  color: var(--viz-failure);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@include mobile {
+  .line {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .keyLine {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+
+    > :nth-child(3) {
+      display: none;
+    }
+  }
+}

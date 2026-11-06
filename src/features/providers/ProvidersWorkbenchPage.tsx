@@ -1,119 +1,57 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RowGroups } from '@/components/common/GroupedRows';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
-import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useAuthStore, useNotificationStore } from '@/stores';
+import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import type { ResolvedTheme } from '@/types';
 import { useProviderRecentRequests } from '@/components/providers/hooks/useProviderRecentRequests';
+import { ProviderBrandGroup } from './components/ProviderBrandGroup';
+import { ProviderResourceRow } from './components/ProviderResourceRow';
+import { getResourceLabel } from './components/providerDisplay';
+import { ProvidersHeader } from './components/ProvidersHeader';
 import {
-  getOpenAIProviderRecentWindowStats,
-  getProviderRecentWindowStats,
-  getProviderUsageKey,
-  type ProviderRecentUsageMap,
-} from '@/components/providers/utils';
-import type { OpenAIProviderConfig } from '@/types';
-import { ProviderHeaderCard } from './components/ProviderHeaderCard';
-import { ProviderCategoryList } from './components/ProviderCategoryList';
-import { ProviderResourcePanel } from './components/ProviderResourcePanel';
-import type { ProviderPanelControls } from './components/ProviderResourcePanel';
-import { SponsorQuickStartPanel } from './components/SponsorQuickStartPanel';
-import { ProviderSheet, type ProviderSheetHandle } from './sheets/ProviderSheet';
-import { APIKEY_FUN_DISPLAY_NAME } from './sponsor';
-import { isMultiProtocolSponsorBrand } from './sponsorDefinitions';
+  ProviderSheet,
+  type ProviderSheetHandle,
+  type ProviderSheetState,
+} from './sheets/ProviderSheet';
 import { isSponsorPartialMutationError } from './sponsorMutationRecovery';
 import { useProviderWorkbench } from './useProviderWorkbench';
-import {
-  getProviderFilterState,
-  readProvidersWorkbenchUiState,
-  writeProvidersWorkbenchUiState,
-  type ProviderFilterState,
-  type ProvidersWorkbenchUiState,
-} from './uiState';
-import type { ProviderBrand, ProviderResource, ProviderSortBy, SortDir } from './types';
+import type { ProviderBrand, ProviderResource } from './types';
 import styles from './ProvidersWorkbenchPage.module.scss';
 
-type SheetMode = 'detail' | 'create' | 'edit';
+/** Filter/sort state from the old single-brand table; no longer read. */
+const LEGACY_UI_STATE_KEY = 'providersPage.uiState';
+const SKELETON_GROUP_COUNT = 3;
 
-interface SheetState {
-  open: boolean;
-  brand: ProviderBrand;
-  mode: SheetMode;
-  resource: ProviderResource | null;
-}
-
-interface ProvidersWorkbenchPageProps {
-  fixedBrand?: ProviderBrand;
-}
-
-const formatDateTime = (iso: string, locale?: string) => {
-  try {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return iso;
-    return new Intl.DateTimeFormat(locale, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(date);
-  } catch {
-    return iso;
-  }
-};
-
-const matchesFilter = (r: ProviderResource, normalized: string): boolean => {
-  if (!normalized) return true;
-  const haystack = [
-    r.identifier,
-    r.name,
-    r.authIndex,
-    r.apiKeyPreview,
-    r.apiKey,
-    r.baseUrl,
-    r.proxyUrl,
-    r.prefix,
-  ]
-    .filter(Boolean)
-    .map((v) => String(v).toLowerCase());
-  return haystack.some((v) => v.includes(normalized));
-};
-
-const getResourceSortName = (resource: ProviderResource): string =>
-  (resource.name ?? resource.identifier ?? resource.apiKeyPreview ?? '').toLowerCase();
-
-const getResourceRecentSuccess = (
-  resource: ProviderResource,
-  usageByProvider: ProviderRecentUsageMap
-): number => {
-  if (isMultiProtocolSponsorBrand(resource.brand)) {
-    return 0;
-  }
-  if (resource.brand === 'openaiCompatibility') {
-    return getOpenAIProviderRecentWindowStats(resource.raw as OpenAIProviderConfig, usageByProvider)
-      .success;
-  }
-  return getProviderRecentWindowStats(
-    usageByProvider,
-    getProviderUsageKey(resource.brand),
-    resource.apiKey ?? undefined,
-    resource.baseUrl ?? undefined
-  ).success;
-};
-
-export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPageProps = {}) {
-  const { t, i18n } = useTranslation();
+export function ProvidersWorkbenchPage() {
+  const { t } = useTranslation();
   const connectionStatus = useAuthStore((s) => s.connectionStatus);
+  const resolvedTheme: ResolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const { showNotification, showConfirmation } = useNotificationStore();
 
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
 
   const workbench = useProviderWorkbench();
-  const [uiState, setUiState] = useState<ProvidersWorkbenchUiState>(readProvidersWorkbenchUiState);
-  const [sheetState, setSheetState] = useState<SheetState>({
+  const [sheetState, setSheetState] = useState<ProviderSheetState>({
     open: false,
     brand: 'gemini',
-    mode: 'detail',
+    mode: 'create',
     resource: null,
   });
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const sheetRef = useRef<ProviderSheetHandle>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(LEGACY_UI_STATE_KEY);
+    } catch {
+      // storage unavailable
+    }
+  }, []);
 
   const connected = connectionStatus === 'connected';
   const { usageByProvider, refreshRecentRequests } = useProviderRecentRequests({
@@ -127,197 +65,72 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
   useHeaderRefresh(handleRefresh, isCurrentLayer);
 
   const disableMutations =
-    connectionStatus !== 'connected' ||
-    workbench.mutating ||
-    workbench.isFetching ||
-    workbench.isError;
-
-  const persistUiState = useCallback(
-    (updater: (prev: ProvidersWorkbenchUiState) => ProvidersWorkbenchUiState) => {
-      setUiState((prev) => {
-        const next = updater(prev);
-        writeProvidersWorkbenchUiState(next);
-        return next;
-      });
-    },
-    []
-  );
-
-  const setActiveBrand = useCallback(
-    (brand: ProviderBrand) => {
-      persistUiState((prev) =>
-        prev.activeBrand === brand ? prev : { ...prev, activeBrand: brand }
-      );
-    },
-    [persistUiState]
-  );
+    !connected || workbench.mutating || workbench.isFetching || workbench.isError;
 
   const allGroups = useMemo(() => workbench.snapshot?.groups ?? [], [workbench.snapshot]);
-  const groups = useMemo(
-    () =>
-      fixedBrand
-        ? allGroups.filter((group) => group.id === fixedBrand)
-        : allGroups.filter((group) => group.id !== 'apikeyFun'),
-    [allGroups, fixedBrand]
+  const configuredGroups = useMemo(
+    () => allGroups.filter((group) => group.resources.length > 0),
+    [allGroups]
   );
-  const firstVisibleBrand = groups[0]?.id ?? fixedBrand ?? 'gemini';
-  const activeBrand =
-    fixedBrand ??
-    (groups.some((group) => group.id === uiState.activeBrand)
-      ? uiState.activeBrand
-      : firstVisibleBrand);
-  const activeFilterState = getProviderFilterState(uiState, activeBrand);
-  const filter = activeFilterState.filter;
-  const providerSortBy = activeFilterState.sortBy;
-  const providerSortDir = activeFilterState.sortDir;
-  const activeGroup = groups.find((g) => g.id === activeBrand) ?? groups[0] ?? null;
+  const unconfiguredBrands = useMemo(
+    () => allGroups.filter((group) => group.resources.length === 0).map((group) => group.id),
+    [allGroups]
+  );
+  const totals = useMemo(() => {
+    let total = 0;
+    let active = 0;
+    configuredGroups.forEach((group) => {
+      total += group.resources.length;
+      active += group.resources.filter((resource) => !resource.disabled).length;
+    });
+    return { total, active };
+  }, [configuredGroups]);
 
-  const updateActiveFilterState = useCallback(
-    (patch: Partial<ProviderFilterState>) => {
-      persistUiState((prev) => {
-        const current = getProviderFilterState(prev, activeBrand);
-        return {
-          ...prev,
-          filtersByBrand: {
-            ...prev.filtersByBrand,
-            [activeBrand]: {
-              ...current,
-              ...patch,
-            },
-          },
-        };
+  /** Opens the sheet, guarding unsaved edits when switching targets. */
+  const openSheet = useCallback(
+    (next: Omit<ProviderSheetState, 'open'>) => {
+      const switching =
+        sheetState.open &&
+        (sheetState.brand !== next.brand ||
+          sheetState.mode !== next.mode ||
+          sheetState.resource?.id !== next.resource?.id);
+      const proceed =
+        switching && sheetRef.current
+          ? sheetRef.current.confirmDiscardIfDirty()
+          : Promise.resolve(true);
+      void proceed.then((ok) => {
+        if (ok) setSheetState({ ...next, open: true });
       });
     },
-    [activeBrand, persistUiState]
+    [sheetState]
   );
 
-  const filteredResources = useMemo(() => {
-    if (!activeGroup) return [];
-    const normalized = filter.trim().toLowerCase();
-    return activeGroup.resources.filter((r) => matchesFilter(r, normalized));
-  }, [activeGroup, filter]);
-
-  const availableModels = useMemo(() => {
-    if (!activeGroup) return [];
-    const seen = new Set<string>();
-    activeGroup.resources.forEach((r) => {
-      r.models.forEach((name) => seen.add(name));
-    });
-    return Array.from(seen).sort();
-  }, [activeGroup]);
-
-  const selectedModels = useMemo(() => {
-    if (availableModels.length === 0) return new Set<string>();
-    const availableModelSet = new Set(availableModels);
-    return new Set(activeFilterState.selectedModels.filter((name) => availableModelSet.has(name)));
-  }, [activeFilterState.selectedModels, availableModels]);
-
-  const visibleResources = useMemo(() => {
-    let arr = filteredResources;
-    if (selectedModels.size > 0) {
-      arr = arr.filter((r) => r.models.some((name) => selectedModels.has(name)));
-    }
-
-    const sorted = [...arr].sort((a, b) => {
-      const sortDiff =
-        providerSortBy === 'name'
-          ? getResourceSortName(a).localeCompare(getResourceSortName(b))
-          : providerSortBy === 'priority'
-            ? a.priority - b.priority
-            : getResourceRecentSuccess(a, usageByProvider) -
-              getResourceRecentSuccess(b, usageByProvider);
-      const diff = sortDiff || a.originalIndex - b.originalIndex;
-      return providerSortDir === 'asc' ? diff : -diff;
-    });
-
-    return sorted;
-  }, [filteredResources, providerSortBy, providerSortDir, selectedModels, usageByProvider]);
-
-  const toolbarControls = useMemo<ProviderPanelControls | undefined>(() => {
-    if (!activeGroup) return undefined;
-    return {
-      sortBy: providerSortBy,
-      sortDir: providerSortDir,
-      onSortBy: (value: ProviderSortBy) => updateActiveFilterState({ sortBy: value }),
-      onSortDir: (value: SortDir) => updateActiveFilterState({ sortDir: value }),
-      availableModels,
-      selectedModels,
-      onSelectedModelsChange: (next) =>
-        updateActiveFilterState({
-          selectedModels: Array.from(next).sort((a, b) => a.localeCompare(b)),
-        }),
-    };
-  }, [
-    activeGroup,
-    availableModels,
-    providerSortBy,
-    providerSortDir,
-    selectedModels,
-    updateActiveFilterState,
-  ]);
-
-  const totalResources = useMemo(
-    () => groups.reduce((sum, g) => sum + g.resources.length, 0),
-    [groups]
+  const openCreate = useCallback(
+    (brand: ProviderBrand) => openSheet({ brand, mode: 'create', resource: null }),
+    [openSheet]
   );
 
-  const totalActive = useMemo(
-    () => groups.reduce((sum, g) => sum + g.resources.filter((r) => !r.disabled).length, 0),
-    [groups]
+  const openEdit = useCallback(
+    (resource: ProviderResource) => openSheet({ brand: resource.brand, mode: 'edit', resource }),
+    [openSheet]
   );
-
-  const providerFamilies = useMemo(
-    () => groups.filter((g) => g.resources.length > 0).length,
-    [groups]
-  );
-  const quickStartResource = useMemo(
-    () => (fixedBrand === 'apikeyFun' && activeGroup ? (activeGroup.resources[0] ?? null) : null),
-    [activeGroup, fixedBrand]
-  );
-
-  const updatedAtLabel = workbench.snapshot
-    ? formatDateTime(workbench.snapshot.fetchedAt, i18n.language)
-    : t('providersPage.modelCatalog.notLoaded');
-  const headerTitle =
-    fixedBrand === 'apikeyFun'
-      ? quickStartResource
-        ? APIKEY_FUN_DISPLAY_NAME
-        : t('nav.quick_start')
-      : undefined;
-  const errorBanner = workbench.errorMessage ? (
-    <div className="error-box">{workbench.errorMessage}</div>
-  ) : null;
-
-  const openCreate = useCallback(() => {
-    const brand = activeBrand;
-    setSheetState({ open: true, brand, mode: 'create', resource: null });
-  }, [activeBrand]);
-
-  const openView = useCallback((resource: ProviderResource) => {
-    setSheetState({
-      open: true,
-      brand: resource.brand,
-      mode: 'detail',
-      resource,
-    });
-  }, []);
-
-  const openEdit = useCallback((resource: ProviderResource) => {
-    setSheetState({
-      open: true,
-      brand: resource.brand,
-      mode: 'edit',
-      resource,
-    });
-  }, []);
 
   const closeSheet = useCallback(() => {
     setSheetState((s) => ({ ...s, open: false }));
   }, []);
 
+  const toggleExpanded = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const handleDelete = useCallback(
     (resource: ProviderResource) => {
-      const name = resource.name ?? resource.apiKeyPreview ?? resource.identifier ?? '';
+      const name = getResourceLabel(resource);
       showConfirmation({
         title: t('providersPage.delete.title'),
         message: t('providersPage.delete.confirm', { name }),
@@ -371,121 +184,105 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
     closeSheet();
   }, [closeSheet, showNotification, t]);
 
-  // 加载状态
-  if (!workbench.snapshot && workbench.isPending) {
-    return (
-      <div className={styles.page}>
-        <Skeleton height={120} />
-        <div className={styles.layout}>
-          <Skeleton height={420} />
-          <Skeleton height={420} />
-        </div>
-      </div>
-    );
-  }
+  const loading = !workbench.snapshot && workbench.isPending;
 
-  if (!activeGroup) {
-    return (
-      <div className={styles.page}>
-        <ProviderHeaderCard
-          title={headerTitle}
-          totalActive={0}
-          totalResources={0}
-          providerFamilies={0}
-          updatedAtLabel={updatedAtLabel}
-          isFetching={workbench.isFetching}
-          onRefresh={() => void handleRefresh()}
-          onNew={() => {}}
-          isNewDisabled
-          showNewAction={!fixedBrand}
-          showSummary={fixedBrand !== 'apikeyFun'}
-        />
-        {errorBanner}
-      </div>
-    );
-  }
+  const addLine =
+    unconfiguredBrands.length > 0 ? (
+      <nav className={styles.addLine} aria-label={t('providersPage.addLine.title')}>
+        <span className={styles.addLabel}>{t('providersPage.addLine.label')}</span>
+        {unconfiguredBrands.map((brand, index) => {
+          const name = t(`providersPage.providerNames.${brand}`);
+          return (
+            <span key={brand} className={styles.addItem}>
+              {index > 0 && (
+                <span className={styles.addDot} aria-hidden="true">
+                  ·
+                </span>
+              )}
+              <button
+                type="button"
+                className={styles.addButton}
+                onClick={() => openCreate(brand)}
+                disabled={disableMutations}
+                aria-label={t('providersPage.group.add', { provider: name })}
+              >
+                {name}
+              </button>
+            </span>
+          );
+        })}
+      </nav>
+    ) : null;
 
   return (
     <div className={styles.page}>
-      <ProviderHeaderCard
-        title={headerTitle}
-        totalActive={totalActive}
-        totalResources={totalResources}
-        providerFamilies={providerFamilies}
-        updatedAtLabel={updatedAtLabel}
-        isFetching={workbench.isFetching}
-        isNewDisabled={disableMutations}
-        showNewAction={!fixedBrand}
-        showSummary={fixedBrand !== 'apikeyFun'}
-        newLabel={t('providersPage.actions.new')}
-        variant={fixedBrand === 'apikeyFun' ? 'quickStart' : undefined}
+      <ProvidersHeader
+        activeCount={totals.active}
+        totalCount={totals.total}
+        refreshing={workbench.isFetching}
         onRefresh={() => void handleRefresh()}
-        onNew={openCreate}
       />
 
-      {errorBanner}
-
-      <div className={`${styles.layout} ${fixedBrand ? styles.layoutSingle : ''}`.trim()}>
-        {!fixedBrand ? (
-          <ProviderCategoryList
-            groups={groups}
-            activeBrand={activeGroup.id}
-            onSelect={(brand) => {
-              const isSwitching = sheetState.open && sheetState.brand !== brand;
-              const proceed =
-                isSwitching && sheetRef.current
-                  ? sheetRef.current.confirmDiscardIfDirty()
-                  : Promise.resolve(true);
-              void proceed.then((ok) => {
-                if (!ok) return;
-                setActiveBrand(brand);
-                if (isSwitching) {
-                  closeSheet();
-                }
-              });
-            }}
-          />
-        ) : null}
-        {fixedBrand === 'apikeyFun' ? (
-          <SponsorQuickStartPanel
-            resource={quickStartResource}
-            workbench={workbench}
-            mutationDisabled={disableMutations}
-          />
-        ) : (
-          <ProviderResourcePanel
-            group={activeGroup}
-            filter={filter}
-            onFilterChange={(value) => updateActiveFilterState({ filter: value })}
-            filteredResources={visibleResources}
-            selectedId={sheetState.open ? (sheetState.resource?.id ?? null) : null}
-            disableMutations={disableMutations}
-            usageByProvider={usageByProvider}
-            toolbarControls={toolbarControls}
-            onView={openView}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-            onToggleDisabled={handleToggleDisabled}
-            onCreate={openCreate}
-          />
+      <section className={styles.workbench}>
+        {workbench.errorMessage && (
+          <div className={styles.errorBanner} role="alert">
+            {workbench.errorMessage}
+          </div>
         )}
-      </div>
 
-      {!fixedBrand ? (
-        <ProviderSheet
-          ref={sheetRef}
-          state={sheetState}
-          onClose={closeSheet}
-          onSwitchToEdit={() => {
-            setSheetState((s) => (s.resource ? { ...s, mode: 'edit' } : s));
-          }}
-          workbench={workbench}
-          onCreated={handleCreated}
-          onUpdated={handleUpdated}
-          mutationDisabled={disableMutations}
-          usageByProvider={usageByProvider}
-        />
-      ) : null}
+        {loading ? (
+          <div className={styles.skeletons} aria-hidden="true">
+            {Array.from({ length: SKELETON_GROUP_COUNT }, (_, index) => (
+              <Skeleton key={index} height={88} rounded={12} />
+            ))}
+          </div>
+        ) : configuredGroups.length === 0 ? (
+          workbench.snapshot ? (
+            <EmptyState
+              title={t('providersPage.empty.title')}
+              description={t('providersPage.empty.description')}
+            />
+          ) : null
+        ) : (
+          <RowGroups>
+            {configuredGroups.map((group) => (
+              <ProviderBrandGroup
+                key={group.id}
+                group={group}
+                resolvedTheme={resolvedTheme}
+                addDisabled={disableMutations}
+                onAdd={openCreate}
+              >
+                {group.resources.map((resource) => (
+                  <ProviderResourceRow
+                    key={resource.id}
+                    resource={resource}
+                    usageByProvider={usageByProvider}
+                    expanded={expanded.has(resource.id)}
+                    disableMutations={disableMutations}
+                    onToggleExpanded={() => toggleExpanded(resource.id)}
+                    onToggleDisabled={handleToggleDisabled}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </ProviderBrandGroup>
+            ))}
+          </RowGroups>
+        )}
+
+        {!loading && addLine}
+      </section>
+
+      <ProviderSheet
+        ref={sheetRef}
+        state={sheetState}
+        onClose={closeSheet}
+        workbench={workbench}
+        onCreated={handleCreated}
+        onUpdated={handleUpdated}
+        mutationDisabled={disableMutations}
+      />
     </div>
   );
 }

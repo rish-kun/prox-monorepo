@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { groupedRowStyles as rowStyles } from '@/components/common/GroupedRows';
 import type { OAuthConfigLoadError } from '@/features/authFiles/constants';
 import styles from './OAuthConfigPanels.module.scss';
 
@@ -23,9 +24,14 @@ export function OAuthExcludedCard(props: OAuthExcludedCardProps) {
       <header className={styles.panelHead}>
         <h3 className={styles.panelTitle}>{t('oauth_excluded.title')}</h3>
         <div className={styles.panelExtra}>
-          <Button size="sm" onClick={onAdd} disabled={disableControls || excludedError !== null}>
+          <button
+            type="button"
+            className={rowStyles.textButton}
+            onClick={onAdd}
+            disabled={disableControls || excludedError !== null}
+          >
             {t('oauth_excluded.add')}
-          </Button>
+          </button>
         </div>
       </header>
       <div className={styles.panelBody}>
@@ -60,12 +66,22 @@ export function OAuthExcludedCard(props: OAuthExcludedCardProps) {
                   </div>
                 </div>
                 <div className={styles.itemActions}>
-                  <Button variant="secondary" size="sm" onClick={() => onEdit(provider)}>
+                  <button
+                    type="button"
+                    className={rowStyles.textButton}
+                    onClick={() => onEdit(provider)}
+                    disabled={disableControls}
+                  >
                     {t('common.edit')}
-                  </Button>
-                  <Button variant="danger" size="sm" onClick={() => onDelete(provider)}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${rowStyles.textButton} ${rowStyles.danger}`}
+                    onClick={() => onDelete(provider)}
+                    disabled={disableControls}
+                  >
                     {t('oauth_excluded.delete')}
-                  </Button>
+                  </button>
                 </div>
               </div>
             ))}

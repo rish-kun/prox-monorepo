@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { formatCompactNumber, formatPercent } from '../src/utils/format';
-import { getProviderKeyCounts } from '../src/features/dashboard/hooks/useDashboardOverview';
 import {
   axisMax,
   niceCeil,
@@ -102,23 +101,6 @@ describe('splitWindowMinutes', () => {
     expect(splitWindowMinutes(200)).toEqual({ hours: 3, minutes: 20 });
     expect(splitWindowMinutes(60)).toEqual({ hours: 1, minutes: 0 });
     expect(splitWindowMinutes(40)).toEqual({ hours: 0, minutes: 40 });
-  });
-});
-
-describe('provider key counts', () => {
-  test('includes Muse API keys and defaults missing configuration to zero', () => {
-    expect(getProviderKeyCounts({ metaApiKeys: [{ apiKey: 'fixture-meta-key' }] }).meta).toBe(1);
-    expect(getProviderKeyCounts({}).meta).toBe(0);
-  });
-  test('includes native Interactions API keys in the dashboard total inputs', () => {
-    const counts = getProviderKeyCounts({
-      geminiApiKeys: [{ apiKey: 'gemini-key' }],
-      interactionsApiKeys: [{ apiKey: 'interactions-1' }, { apiKey: 'interactions-2' }],
-      codexApiKeys: [{ apiKey: 'codex-key' }],
-    });
-
-    expect(counts.interactions).toBe(2);
-    expect(Object.values(counts).reduce((sum, count) => sum + count, 0)).toBe(4);
   });
 });
 

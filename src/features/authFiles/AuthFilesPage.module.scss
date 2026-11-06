@@ -1,7 +1,7 @@
 @use '../../styles/mixins' as *;
 
 /* ============================================================
- * 认证文件页壳层：纯布局，视觉细节都在各组件的 colocated 模块里。
+ * 认证文件页壳层：纯布局，视觉细节在各组件 / GroupedRows 里。
  * ============================================================ */
 
 .page {
@@ -15,8 +15,6 @@
     var(--auth-files-action-bar-height, 0px) + 16px + env(safe-area-inset-bottom, 0px)
   );
 }
-
-/* ---------- 工作区（tabs + 工具栏 + 网格 + 分页） ---------- */
 
 .workbench {
   display: flex;
@@ -36,26 +34,6 @@
   overflow-wrap: anywhere;
 }
 
-/* ---------- 卡片网格 ---------- */
-
-.grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  align-items: stretch;
-}
-
-.gridCompact {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-}
-
-/* provider tab 激活（配额模式）时卡片承载配额区，需要更宽的列。
-   值与 .grid 相同但**必须保留且排在 .gridCompact 之后**：三个类同时挂在网格上，
-   同specificity 靠源序决胜，删掉这条会让「紧凑 + 配额」从 340 掉回 260。 */
-.gridQuota {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-}
-
 .emptyActions {
   display: flex;
   align-items: center;
@@ -64,34 +42,98 @@
   justify-content: center;
 }
 
-/* ---------- 分页 ---------- */
+/* 超大组的「显示全部」行：与行同一 1px 分隔。 */
+.showAllRow {
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-color);
+}
 
-.pagination {
+/* 页尾安静文字动作（OAuth 规则开关、删除全部、显示全部）。 */
+.quietButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-left: -10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+.quietButton.dangerText {
+  color: var(--danger-color);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .quietButton:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .quietButton.dangerText:hover:not(:disabled) {
+    color: var(--danger-color);
+  }
+}
+
+/* ---------- OAuth 规则（默认折叠） ---------- */
+
+.rulesSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.footerBar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 8px 16px;
   flex-wrap: wrap;
+
+  > .quietButton:last-child:not(:first-child) {
+    margin-left: 0;
+    margin-right: -10px;
+  }
 }
 
-.pageInfo {
-  font-family: $font-mono;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: var(--text-tertiary);
-  white-space: nowrap;
+.chevron {
+  transform: rotate(-90deg);
+  transition: transform $transition-fast;
 }
 
-/* ---------- OAuth 配置双卡 ---------- */
+.chevronOpen {
+  transform: none;
+}
 
-.configGrid {
+.rulesGrid {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   grid-template-columns: minmax(0, 1fr);
 
   @media (min-width: 1024px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
   }
 }
 

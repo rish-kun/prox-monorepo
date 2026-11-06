@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { groupedRowStyles as rowStyles } from '@/components/common/GroupedRows';
 import { ModelMappingDiagram, type ModelMappingDiagramRef } from '@/components/modelAlias';
 import { IconChevronUp } from '@/components/ui/icons';
 import type { OAuthModelAliasEntry } from '@/types';
@@ -59,29 +60,28 @@ export function OAuthModelAliasCard(props: OAuthModelAliasCardProps) {
       <header className={styles.panelHead}>
         <h3 className={styles.panelTitle}>{t('oauth_model_alias.title')}</h3>
         <div className={styles.panelExtra}>
-          <div className={styles.viewModeSwitch}>
-            <Button
-              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => onViewModeChange('list')}
-              disabled={disableControls || modelAliasError !== null}
-              aria-pressed={viewMode === 'list'}
-            >
-              {t('oauth_model_alias.view_mode_list')}
-            </Button>
-            <Button
-              variant={viewMode === 'diagram' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => onViewModeChange('diagram')}
-              disabled={disableControls || modelAliasError !== null}
-              aria-pressed={viewMode === 'diagram'}
-            >
-              {t('oauth_model_alias.view_mode_diagram')}
-            </Button>
+          <div className={styles.viewModeSwitch} role="group">
+            {(['list', 'diagram'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`${styles.viewModeButton} ${viewMode === mode ? styles.viewModeActive : ''}`}
+                onClick={() => onViewModeChange(mode)}
+                disabled={disableControls || modelAliasError !== null}
+                aria-pressed={viewMode === mode}
+              >
+                {t(`oauth_model_alias.view_mode_${mode}`)}
+              </button>
+            ))}
           </div>
-          <Button size="sm" onClick={onAdd} disabled={disableControls || modelAliasError !== null}>
+          <button
+            type="button"
+            className={rowStyles.textButton}
+            onClick={onAdd}
+            disabled={disableControls || modelAliasError !== null}
+          >
             {t('oauth_model_alias.add')}
-          </Button>
+          </button>
         </div>
       </header>
       <div className={styles.panelBody}>
@@ -108,16 +108,16 @@ export function OAuthModelAliasCard(props: OAuthModelAliasCardProps) {
             <div className={styles.aliasChartSection}>
               <div className={styles.aliasChartHeader}>
                 <h4 className={styles.aliasChartTitle}>{t('oauth_model_alias.chart_title')}</h4>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
+                  type="button"
+                  className={rowStyles.iconButton}
                   onClick={() => diagramRef.current?.collapseAll()}
                   disabled={disableControls || modelAliasError !== null}
                   title={t('oauth_model_alias.diagram_collapse')}
                   aria-label={t('oauth_model_alias.diagram_collapse')}
                 >
                   <IconChevronUp size={16} />
-                </Button>
+                </button>
               </div>
               <ModelMappingDiagram
                 ref={diagramRef}
@@ -149,12 +149,22 @@ export function OAuthModelAliasCard(props: OAuthModelAliasCardProps) {
                   </div>
                 </div>
                 <div className={styles.itemActions}>
-                  <Button variant="secondary" size="sm" onClick={() => onEditProvider(provider)}>
+                  <button
+                    type="button"
+                    className={rowStyles.textButton}
+                    onClick={() => onEditProvider(provider)}
+                    disabled={disableControls}
+                  >
                     {t('common.edit')}
-                  </Button>
-                  <Button variant="danger" size="sm" onClick={() => onDeleteProvider(provider)}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${rowStyles.textButton} ${rowStyles.danger}`}
+                    onClick={() => onDeleteProvider(provider)}
+                    disabled={disableControls}
+                  >
                     {t('oauth_model_alias.delete')}
-                  </Button>
+                  </button>
                 </div>
               </div>
             ))}

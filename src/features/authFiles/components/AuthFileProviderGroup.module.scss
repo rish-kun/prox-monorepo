@@ -1,0 +1,101 @@
+/* Provider group header pieces; the group frame comes from GroupedRows. */
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.providerIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+
+  img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+  }
+}
+
+.square {
+  width: 9px;
+  height: 9px;
+  border-radius: 2.5px;
+  background: var(--border-hover);
+}
+
+.square.squareOk {
+  background: var(--viz-success);
+}
+
+.square.squareWarn {
+  background: var(--quota-medium-color);
+}
+
+.square.squareBad {
+  background: var(--viz-failure);
+}
+
+/* "N problems": a text button that selects the group's problem rows. */
+.problems {
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--viz-failure);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+
+  &:disabled {
+    cursor: default;
+    text-decoration: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+.links {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.link {
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .problems:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+  }
+
+  .link:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  buildWildcardSearch,
-  matchesAuthFileSearch,
+  countByProviderKey,
+  getAuthFileProviderKey,
+  groupAuthFilesByProvider,
+  resolveAuthFileHealth,
   resolveAuthFileQuotaType,
-  sortAuthFiles,
+  summarizeAuthFileGroup,
 } from '../src/features/authFiles/logic';
 import type { AuthFileItem } from '../src/types';
 
@@ -13,191 +15,105 @@ const authFile = (overrides: Partial<AuthFileItem> = {}): AuthFileItem => ({
   ...overrides,
 });
 
-const search = (file: AuthFileItem, term: string) =>
-  matchesAuthFileSearch(file, term, buildWildcardSearch(term));
+const NOW = 1_700_000_000_000;
 
-describe('buildWildcardSearch', () => {
-  test('returns null when the term has no wildcard', () => {
-    expect(buildWildcardSearch('user@example.com')).toBeNull();
-  });
-
-  test('stays unanchored — segments may match anywhere in the value', () => {
-    expect(buildWildcardSearch('a*b')?.test('zzzaqqbzzz')).toBe(true);
-  });
-
-  test('escapes regex metacharacters in the segments', () => {
-    const pattern = buildWildcardSearch('u+1*');
-    expect(pattern?.test('u+1@x.com')).toBe(true);
-    expect(pattern?.test('u1@x.com')).toBe(false);
-  });
-
-  test('a lone wildcard matches everything', () => {
-    expect(buildWildcardSearch('*')?.test('anything')).toBe(true);
-  });
+const cooling = (remainingSeconds: number): Partial<AuthFileItem> => ({
+  cooldownSnapshot: {
+    receivedAtMs: NOW,
+    records: [{ scope: 'credential', reason: 'quota', retryAt: '', remainingSeconds }],
+  },
 });
 
 describe('resolveAuthFileQuotaType', () => {
-  test('resolves each supported provider while the all tab is selected', () => {
+  test('all shows each supported provider quota', () => {
     expect(resolveAuthFileQuotaType(authFile({ type: 'codex' }), 'all')).toBe('codex');
     expect(resolveAuthFileQuotaType(authFile({ type: 'kimi' }), 'all')).toBe('kimi');
   });
 
-  test('does not expose quota for unsupported or mismatched providers', () => {
+  test('unsupported providers or mismatched filters show no quota', () => {
     expect(resolveAuthFileQuotaType(authFile({ type: 'gemini' }), 'all')).toBeNull();
     expect(resolveAuthFileQuotaType(authFile({ type: 'codex' }), 'claude')).toBeNull();
     expect(resolveAuthFileQuotaType(authFile({ type: 'codex' }), null)).toBeNull();
   });
 });
 
-describe('matchesAuthFileSearch', () => {
-  test('an empty term matches every file', () => {
-    expect(matchesAuthFileSearch(authFile(), '', null)).toBe(true);
+describe('groupAuthFilesByProvider', () => {
+  test('groups by normalized provider key, type first then provider', () => {
+    expect(getAuthFileProviderKey(authFile({ type: 'Codex' }))).toBe('codex');
+    expect(getAuthFileProviderKey(authFile({ type: undefined, provider: 'claude' }))).toBe(
+      'claude'
+    );
+    expect(getAuthFileProviderKey(authFile({ type: undefined }))).toBe('unknown');
   });
 
-  test('matches the file name case-insensitively', () => {
-    expect(search(authFile({ name: 'codex-a.json' }), 'CODEX')).toBe(true);
+  test('orders groups alphabetically with unknown last and rows by name', () => {
+    const files = [
+      authFile({ name: 'z.json', type: 'codex' }),
+      authFile({ name: 'x.json', type: undefined }),
+      authFile({ name: 'a.json', type: 'codex' }),
+      authFile({ name: 'm.json', type: 'claude' }),
+    ];
+    const groups = groupAuthFilesByProvider(files);
+    expect(groups.map((group) => group.type)).toEqual(['claude', 'codex', 'unknown']);
+    expect(groups[1].files.map((file) => file.name)).toEqual(['a.json', 'z.json']);
+    expect(files.map((file) => file.name)).toEqual(['z.json', 'x.json', 'a.json', 'm.json']);
   });
 
-  test('matches the type and the provider', () => {
-    expect(search(authFile({ type: 'antigravity' }), 'antigrav')).toBe(true);
-    expect(search(authFile({ type: undefined, provider: 'gemini' }), 'gemi')).toBe(true);
-  });
-
-  test('finds a kimi credential by account email even though its name carries none', () => {
-    expect(
-      search(
-        authFile({ name: 'kimi-1712345678901.json', type: 'kimi', email: 'user@example.com' }),
-        'user@example'
-      )
-    ).toBe(true);
-  });
-
-  test('matches the project id', () => {
-    expect(search(authFile({ name: 'vertex-x.json', projectId: 'my-proj' }), 'my-proj')).toBe(true);
-  });
-
-  test('searches the email on the wildcard path too', () => {
-    expect(
-      search(authFile({ name: 'kimi-1712345678901.json', email: 'user@example.com' }), 'user@*com')
-    ).toBe(true);
-  });
-
-  test('finds credentials by HTTP error code or error content', () => {
-    const forbidden = authFile({ statusMessage: '403 Forbidden: invalid credentials' });
-    const rateLimited = authFile({
-      statusMessage: '{"error":{"code":429,"message":"Rate limit exceeded"}}',
-    });
-    expect(search(forbidden, '403')).toBe(true);
-    expect(search(forbidden, 'INVALID')).toBe(true);
-    expect(search(forbidden, '403 Forbidden: invalid credentials')).toBe(true);
-    expect(search(forbidden, '429')).toBe(false);
-    expect(search(rateLimited, '429')).toBe(true);
-    expect(search(rateLimited, 'rate limit exceeded')).toBe(true);
-  });
-
-  test('uses the same status message as the card, including raw backend fields', () => {
-    expect(search(authFile({ status_message: '403 Forbidden' }), '403')).toBe(true);
-    expect(
-      search(authFile({ status_message: '429 Too Many Requests', statusMessage: '403' }), '403')
-    ).toBe(false);
-  });
-
-  test('supports wildcards in error content and treats regex punctuation literally', () => {
-    const file = authFile({ statusMessage: '403: invalid_request (credentials)' });
-    expect(search(file, '403*INVALID')).toBe(true);
-    expect(search(file, 'invalid*(credentials)')).toBe(true);
-    expect(search(file, 'invalid*[credentials]')).toBe(false);
-  });
-
-  test('does not search arbitrary credential metadata', () => {
-    expect(search(authFile({ metadata: { secret: 'invalid-secret' } }), 'invalid')).toBe(false);
-  });
-
-  test('never matches the account field — it can be a raw API key', () => {
-    expect(
-      search(
-        authFile({ name: 'gemini-apikey.json', account: 'sk-live-abcd', account_type: 'api_key' }),
-        'sk-live'
-      )
-    ).toBe(false);
-  });
-
-  test('tolerates missing fields', () => {
-    expect(search({ name: 'bare.json' }, 'zzz')).toBe(false);
+  test('keeps same-name credentials apart by auth index order', () => {
+    const groups = groupAuthFilesByProvider([
+      authFile({ name: 'same.json', authIndex: 'b' }),
+      authFile({ name: 'same.json', authIndex: 'a' }),
+    ]);
+    expect(groups[0].files.map((file) => file.authIndex)).toEqual(['a', 'b']);
   });
 });
 
-describe('sortAuthFiles', () => {
-  test("'default' orders by provider then name", () => {
+describe('resolveAuthFileHealth', () => {
+  test('disabled wins over problems; problems win over cooldowns', () => {
+    expect(resolveAuthFileHealth(authFile({ disabled: true, unavailable: true }), NOW)).toEqual({
+      kind: 'disabled',
+    });
+    expect(resolveAuthFileHealth(authFile({ unavailable: true, ...cooling(60) }), NOW)).toEqual({
+      kind: 'problem',
+    });
+    expect(resolveAuthFileHealth(authFile({ statusMessage: 'HTTP 429' }), NOW).kind).toBe(
+      'problem'
+    );
+  });
+
+  test('active cooldowns report the remaining server-measured seconds', () => {
+    expect(resolveAuthFileHealth(authFile(cooling(240)), NOW)).toEqual({
+      kind: 'cooling',
+      seconds: 240,
+    });
+    expect(resolveAuthFileHealth(authFile(cooling(240)), NOW + 240_000)).toEqual({ kind: 'ok' });
+    expect(resolveAuthFileHealth(authFile({ statusMessage: 'ok' }), NOW)).toEqual({ kind: 'ok' });
+  });
+});
+
+describe('summarizeAuthFileGroup', () => {
+  test('counts active credentials and selects only selectable problem rows', () => {
+    const problem = authFile({ name: 'p.json', unavailable: true });
+    const virtualProblem = authFile({ name: 'v.json', unavailable: true, runtimeOnly: true });
     const files = [
-      authFile({ name: 'b.json', provider: 'kimi' }),
-      authFile({ name: 'c.json', type: 'codex', provider: undefined }),
-      authFile({ name: 'a.json', provider: 'kimi' }),
+      authFile({ name: 'ok.json' }),
+      authFile({ name: 'cool.json', ...cooling(30) }),
+      authFile({ name: 'off.json', disabled: true }),
+      problem,
+      virtualProblem,
     ];
-    expect(sortAuthFiles(files, 'default').map((file) => file.name)).toEqual([
-      'c.json',
-      'a.json',
-      'b.json',
-    ]);
+    const summary = summarizeAuthFileGroup(files, (file) => resolveAuthFileHealth(file, NOW));
+    expect(summary.total).toBe(5);
+    expect(summary.active).toBe(2);
+    expect(summary.problemCount).toBe(2);
+    expect(summary.problemFiles).toEqual([problem]);
   });
+});
 
-  test("'az' orders by the displayed primary row, not by the file name", () => {
-    const files = [
-      authFile({ name: 'zzz.json', email: 'aaa@example.com' }),
-      authFile({ name: 'aaa.json', email: 'zzz@example.com' }),
-    ];
-    expect(sortAuthFiles(files, 'az').map((file) => file.name)).toEqual(['zzz.json', 'aaa.json']);
-  });
-
-  test("'az' falls back to the file name when primaries are equal", () => {
-    const files = [
-      authFile({ name: 'codex-abc-user@x.com-team.json', email: 'user@x.com' }),
-      authFile({ name: 'codex-abc-user@x.com-plus.json', email: 'user@x.com' }),
-    ];
-    expect(sortAuthFiles(files, 'az').map((file) => file.name)).toEqual([
-      'codex-abc-user@x.com-plus.json',
-      'codex-abc-user@x.com-team.json',
-    ]);
-  });
-
-  test("'az' mixes account primaries and file-name fallbacks coherently", () => {
-    const files = [
-      authFile({ name: 'kimi-9.json', type: 'kimi' }),
-      authFile({ name: 'zzz.json', email: 'aaa@example.com' }),
-    ];
-    expect(sortAuthFiles(files, 'az').map((file) => file.name)).toEqual([
-      'zzz.json',
-      'kimi-9.json',
-    ]);
-  });
-
-  test("'priority' orders descending, treats missing values as 0 and stays stable on ties", () => {
-    const files = [
-      authFile({ name: 'a.json' }),
-      authFile({ name: 'b.json', priority: 5 }),
-      authFile({ name: 'c.json' }),
-      authFile({ name: 'd.json', priority: 9 }),
-    ];
-    expect(sortAuthFiles(files, 'priority').map((file) => file.name)).toEqual([
-      'd.json',
-      'b.json',
-      'a.json',
-      'c.json',
-    ]);
-  });
-
-  test('returns a new array and leaves the input untouched', () => {
-    const files = [authFile({ name: 'b.json' }), authFile({ name: 'a.json' })];
-    const result = sortAuthFiles(files, 'az');
-    expect(result).not.toBe(files);
-    expect(files.map((file) => file.name)).toEqual(['b.json', 'a.json']);
-  });
-
-  test('an unknown mode returns an unsorted copy', () => {
-    const files = [authFile({ name: 'b.json' }), authFile({ name: 'a.json' })];
-    expect(sortAuthFiles(files, 'nope' as unknown as 'az').map((file) => file.name)).toEqual([
-      'b.json',
-      'a.json',
-    ]);
+describe('countByProviderKey', () => {
+  test('normalizes provider keys before counting', () => {
+    const counts = countByProviderKey({ Codex: ['a', 'b'], codex: ['c'], claude: [] });
+    expect(counts.get('codex')).toBe(3);
+    expect(counts.get('claude')).toBe(0);
   });
 });

@@ -14,13 +14,12 @@ const HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 
 export type BatchActionBarProps = {
   selectionCount: number;
-  selectablePageCount: number;
-  selectableFilteredCount: number;
+  /** Selectable (non runtime-only) credentials across every group. */
+  selectableCount: number;
   disableControls: boolean;
   batchStatusDisabled: boolean;
-  onSelectPage: () => void;
-  onSelectFiltered: () => void;
-  onInvertPage: () => void;
+  onSelectAll: () => void;
+  onInvert: () => void;
   onDeselectAll: () => void;
   onDownload: () => void;
   onEnable: () => void;
@@ -37,13 +36,11 @@ export type BatchActionBarProps = {
 export function BatchActionBar(props: BatchActionBarProps) {
   const {
     selectionCount,
-    selectablePageCount,
-    selectableFilteredCount,
+    selectableCount,
     disableControls,
     batchStatusDisabled,
-    onSelectPage,
-    onSelectFiltered,
-    onInvertPage,
+    onSelectAll,
+    onInvert,
     onDeselectAll,
     onDownload,
     onEnable,
@@ -157,26 +154,13 @@ export function BatchActionBar(props: BatchActionBarProps) {
           <Button
             variant="secondary"
             size="sm"
-            onClick={onSelectPage}
-            disabled={selectablePageCount === 0}
+            onClick={onSelectAll}
+            disabled={selectableCount === 0 || selectionCount >= selectableCount}
           >
-            {t('auth_files.batch_select_page')}
+            {t('auth_files.batch_select_all')}
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onSelectFiltered}
-            disabled={selectableFilteredCount === 0}
-          >
-            {t('auth_files.batch_select_filtered')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onInvertPage}
-            disabled={selectablePageCount === 0}
-          >
-            {t('auth_files.batch_invert_page')}
+          <Button variant="ghost" size="sm" onClick={onInvert} disabled={selectableCount === 0}>
+            {t('auth_files.batch_invert')}
           </Button>
           <Button variant="ghost" size="sm" onClick={onDeselectAll}>
             {t('auth_files.batch_deselect')}

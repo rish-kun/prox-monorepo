@@ -1,39 +1,95 @@
 @use '../../styles/mixins' as *;
-@use '../../styles/variables' as *;
+
+/* Page shell: layout only. Groups/rows come from the shared GroupedRows. */
 
 .page {
   display: flex;
   flex-direction: column;
   gap: 20px;
   width: 100%;
-  padding: 24px;
-  box-sizing: border-box;
+  min-width: 0;
 }
 
-.layout {
-  display: grid;
-  align-items: start;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr);
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
 
-  @media (min-width: 1280px) {
-    grid-template-columns: 240px minmax(0, 1fr);
+.errorBanner {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger-color);
+  background: var(--bg-error-light);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  overflow-wrap: anywhere;
+}
+
+.skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* "Add: Gemini · Vertex · …" — one quiet line for brands with no entries. */
+.addLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 0;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+.addLabel {
+  margin-right: 8px;
+}
+
+.addItem {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.addDot {
+  padding: 0 7px;
+  color: var(--text-quaternary);
+  user-select: none;
+}
+
+.addButton {
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
 }
 
-.layoutSingle {
-  @media (min-width: 1280px) {
-    grid-template-columns: minmax(0, 1fr);
+@media (hover: hover) and (pointer: fine) {
+  .addButton:hover:not(:disabled) {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 }
 
-.modelCatalogSlot {
-  margin-top: 4px;
-}
-
-@media (max-width: 768px) {
+@include mobile {
   .page {
-    padding: 16px;
     gap: 16px;
   }
 }

@@ -56,9 +56,6 @@ export const OAUTH_PROVIDER_PRESETS = [
 
 const OAUTH_PROVIDER_EXCLUDES = new Set(['all', 'unknown', 'empty']);
 
-export const MIN_CARD_PAGE_SIZE = 3;
-export const MAX_CARD_PAGE_SIZE = 30;
-
 export const INTEGER_STRING_PATTERN = /^[+-]?\d+$/;
 export const TRUTHY_TEXT_VALUES = new Set(['true', '1', 'yes', 'y', 'on']);
 export const FALSY_TEXT_VALUES = new Set(['false', '0', 'no', 'n', 'off']);
@@ -91,9 +88,6 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   vertex: iconVertex,
 };
 
-export const clampCardPageSize = (value: number) =>
-  Math.min(MAX_CARD_PAGE_SIZE, Math.max(MIN_CARD_PAGE_SIZE, Math.round(value)));
-
 export const normalizeProviderKey = normalizeOAuthProviderKey;
 
 export const supportsAuthFileManualRefresh = (provider: unknown): boolean =>
@@ -121,6 +115,36 @@ export const getAuthFileStatusMessage = (file: AuthFileItem): string => {
   if (typeof raw === 'string') return raw.trim();
   if (raw == null) return '';
   return String(raw).trim();
+};
+
+/**
+ * One-line, human-readable form of a status message. Upstream errors often
+ * arrive as raw JSON bodies (`{"error":{"type":"usage_limit_reached",
+ * "message":"The usage limit has been reached",…}}`); show their message
+ * instead. Anything that isn't such a body is returned unchanged.
+ */
+export const summarizeAuthFileStatusMessage = (message: string): string => {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith('{')) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    const pick = (value: unknown): string | null =>
+      typeof value === 'string' && value.trim() ? value.trim() : null;
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      const error = record.error;
+      if (error && typeof error === 'object') {
+        const nested = error as Record<string, unknown>;
+        const text = pick(nested.message) ?? pick(nested.type) ?? pick(nested.code);
+        if (text) return text;
+      }
+      const text = pick(error) ?? pick(record.message) ?? pick(record.detail);
+      if (text) return text;
+    }
+  } catch {
+    // Not JSON after all — fall through to the raw text.
+  }
+  return trimmed;
 };
 
 /** 这些 status_message 视为健康，不触发告警态。 */

@@ -1,5 +1,3 @@
-import { TRAFFIC_BUCKET_MINUTES } from './types';
-
 /** 供应商展示名。均为专有名词，不进入 i18n。 */
 const PROVIDER_LABELS: Record<string, string> = {
   gemini: 'Gemini',
@@ -38,15 +36,10 @@ export function splitWindowMinutes(totalMinutes: number): WindowParts {
   return { hours: Math.floor(safe / 60), minutes: safe % 60 };
 }
 
-/** 桶数 → 覆盖分钟数 */
-export function bucketsToMinutes(bucketCount: number): number {
-  return bucketCount * TRAFFIC_BUCKET_MINUTES;
-}
-
-export type MeterTone = 'good' | 'warning' | 'critical' | 'idle';
+export type RateTone = 'good' | 'warning' | 'critical' | 'idle';
 
 /** 成功率 → 严重度。数值本身始终可见，颜色只是辅助通道。 */
-export function toneForSuccessRate(rate: number | null): MeterTone {
+export function toneForSuccessRate(rate: number | null): RateTone {
   if (rate === null) return 'idle';
   if (rate >= 95) return 'good';
   if (rate >= 80) return 'warning';

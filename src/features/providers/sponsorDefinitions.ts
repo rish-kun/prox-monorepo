@@ -129,10 +129,7 @@ const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinitio
 };
 
 export const isMultiProtocolSponsorBrand = (brand: ProviderBrand): brand is SponsorProviderBrand =>
-  brand === 'apikeyFun' ||
-  brand === 'fennoAI' ||
-  brand === 'qiniuCloud' ||
-  brand === 'kimi';
+  brand === 'apikeyFun' || brand === 'fennoAI' || brand === 'qiniuCloud' || brand === 'kimi';
 
 export type SponsorAggregationConflict = 'multiple-configs' | 'multiple-openai-keys';
 
