@@ -36,9 +36,11 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/store"
 	_ "github.com/router-for-me/CLIProxyAPI/v8/internal/translator"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/tui"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/usagestore"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v8/sdk/auth"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	coreusage "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 	sdkpluginstore "github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginstore"
 	log "github.com/sirupsen/logrus"
 )
@@ -781,6 +783,8 @@ func main() {
 					password = localMgmtPassword
 				}
 
+				usageStore := openUsageStore(configFilePath)
+				defer closeUsageStore(usageStore)
 				cancel, done := cmd.StartServiceBackgroundWithPluginHost(cfg, configFilePath, password, pluginHost, serverOptions...)
 
 				client := tui.NewClient(cfg.Port, password)
@@ -827,8 +831,36 @@ func main() {
 			managementasset.StartAutoUpdater(context.Background(), configFilePath)
 			misc.StartAntigravityVersionUpdater(context.Background())
 			registry.SetLocalModelCatalogs(localModel)
+			usageStore := openUsageStore(configFilePath)
 			cmd.StartServiceWithPluginHost(cfg, configFilePath, password, pluginHost, serverOptions...)
+			closeUsageStore(usageStore)
 		}
+	}
+}
+
+// openUsageStore opens the persistent token usage store next to the config file,
+// installs it as the default store and registers it as a usage plugin. Failure is
+// logged and the proxy continues without usage history.
+func openUsageStore(configFilePath string) *usagestore.Store {
+	path := usagestore.PathForConfig(configFilePath)
+	store, errOpen := usagestore.Open(path)
+	if errOpen != nil {
+		log.WithError(errOpen).Error("failed to open usage store; token usage history is disabled")
+		return nil
+	}
+	usagestore.SetDefault(store)
+	coreusage.RegisterNamedPlugin(usagestore.PluginName, store)
+	log.Infof("usage store: recording token usage to %s", path)
+	return store
+}
+
+// closeUsageStore flushes pending usage to disk after the service has stopped.
+func closeUsageStore(store *usagestore.Store) {
+	if store == nil {
+		return
+	}
+	if errClose := store.Close(); errClose != nil {
+		log.WithError(errClose).Error("failed to flush usage store on shutdown")
 	}
 }
 
