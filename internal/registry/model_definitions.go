@@ -41,7 +41,43 @@ type staticModelsJSON struct {
 
 // GetClaudeModels returns the standard Claude model definitions.
 func GetClaudeModels() []*ModelInfo {
-	return cloneModelInfos(getModels().Claude)
+	return appendMissingModels(cloneModelInfos(getModels().Claude), supplementalClaudeModels)
+}
+
+// supplementalClaudeModels lists current Claude models the published catalog may
+// not carry yet. Catalog entries with the same ID always take precedence.
+var supplementalClaudeModels = []*ModelInfo{
+	{
+		ID:                        "claude-haiku-5-5",
+		Object:                    "model",
+		Created:                   1790553600,
+		OwnedBy:                   "anthropic",
+		Type:                      "claude",
+		DisplayName:               "Claude Haiku 5.5",
+		Description:               "Fast, low-cost Claude model for high-volume and sub-agent work",
+		ContextLength:             1000000,
+		MaxCompletionTokens:       128000,
+		Thinking:                  &ThinkingSupport{ZeroAllowed: true, DynamicAllowed: true, Levels: []string{"low", "medium", "high", "xhigh", "max"}},
+		SupportedInputModalities:  []string{"text", "image"},
+		SupportedOutputModalities: []string{"text"},
+	},
+}
+
+// appendMissingModels appends clones of extra models whose IDs are not already present.
+func appendMissingModels(models []*ModelInfo, extra []*ModelInfo) []*ModelInfo {
+	seen := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		if model != nil {
+			seen[strings.ToLower(model.ID)] = struct{}{}
+		}
+	}
+	for _, model := range extra {
+		if _, exists := seen[strings.ToLower(model.ID)]; exists {
+			continue
+		}
+		models = append(models, cloneModelInfo(model))
+	}
+	return models
 }
 
 // GetGeminiModels returns the standard Gemini model definitions.

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -357,6 +358,13 @@ func (h *ClaudeCodeAPIHandler) toClaudeError(msg *interfaces.ErrorMessage) claud
 		}
 	}
 	errType, message := claudeErrorDetailFromText(status, errText)
+	if msg != nil {
+		if _, ok := usageLimitReset(msg.Error); ok {
+			// Anthropic reports a spent subscription window as rate_limit_error; the
+			// Codex-style "usage_limit_reached" type would be unknown to Claude clients.
+			errType = "rate_limit_error"
+		}
+	}
 	response := claudeErrorResponse{
 		Type: "error",
 		Error: claudeErrorDetail{
@@ -406,6 +414,9 @@ func (h *ClaudeCodeAPIHandler) WriteErrorResponse(c *gin.Context, msg *interface
 		for _, value := range coreauth.SafeResponseHeaders(msg.Error).Values("Retry-After") {
 			c.Writer.Header().Add("Retry-After", value)
 		}
+		if resetAt, ok := usageLimitReset(msg.Error); ok {
+			setClaudeUsageLimitHeaders(c.Writer.Header(), resetAt)
+		}
 	}
 	if msg != nil && msg.Addon != nil && handlers.PassthroughHeadersEnabled(h.Cfg) {
 		for key, values := range msg.Addon {
@@ -429,6 +440,28 @@ func (h *ClaudeCodeAPIHandler) WriteErrorResponse(c *gin.Context, msg *interface
 	}
 	c.Status(status)
 	_, _ = c.Writer.Write(body)
+}
+
+// usageLimitReset reports whether err means every credential is out of subscription
+// quota (as opposed to transient throttling) and when the first one resets.
+func usageLimitReset(err error) (time.Time, bool) {
+	var usageLimit interface {
+		UsageLimitReset() (time.Time, bool)
+	}
+	if err == nil || !errors.As(err, &usageLimit) || usageLimit == nil {
+		return time.Time{}, false
+	}
+	return usageLimit.UsageLimitReset()
+}
+
+// setClaudeUsageLimitHeaders marks a 429 the way Anthropic marks a spent subscription
+// window. Claude Code tells a plan limit apart from server throttling only by these
+// unified headers; x-should-retry stops it from retrying into a window hours away.
+func setClaudeUsageLimitHeaders(header http.Header, resetAt time.Time) {
+	reset := strconv.FormatInt(resetAt.Unix(), 10)
+	header.Set("anthropic-ratelimit-unified-status", "rejected")
+	header.Set("anthropic-ratelimit-unified-reset", reset)
+	header.Set("x-should-retry", "false")
 }
 
 func claudeErrorText(err error) string {
