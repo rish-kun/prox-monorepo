@@ -1,0 +1,144 @@
+@use '../../styles/mixins' as *;
+
+/* ============================================================
+ * 认证文件页壳层：纯布局，视觉细节在各组件 / GroupedRows 里。
+ * ============================================================ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+  /* 底部为悬浮批量条留出实时高度 */
+  padding-bottom: calc(
+    var(--auth-files-action-bar-height, 0px) + 16px + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.errorBanner {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger-color);
+  background: var(--bg-error-light);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  overflow-wrap: anywhere;
+}
+
+.emptyActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* 超大组的「显示全部」行：与行同一 1px 分隔。 */
+.showAllRow {
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* 页尾安静文字动作（OAuth 规则开关、删除全部、显示全部）。 */
+.quietButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-left: -10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+.quietButton.dangerText {
+  color: var(--danger-color);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .quietButton:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .quietButton.dangerText:hover:not(:disabled) {
+    color: var(--danger-color);
+  }
+}
+
+/* ---------- OAuth 规则（默认折叠） ---------- */
+
+.rulesSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.footerBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+
+  > .quietButton:last-child:not(:first-child) {
+    margin-left: 0;
+    margin-right: -10px;
+  }
+}
+
+.chevron {
+  transform: rotate(-90deg);
+  transition: transform $transition-fast;
+}
+
+.chevronOpen {
+  transform: none;
+}
+
+.rulesGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+@include mobile {
+  .page {
+    gap: 16px;
+  }
+}

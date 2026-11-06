@@ -1,0 +1,21 @@
+/* Sponsor dashboard / registration link: plain small text, no pill. */
+.link {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: 4px;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .link:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}

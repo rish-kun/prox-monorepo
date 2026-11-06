@@ -1,0 +1,565 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Remaining-quota forecast: the quota page's bordered group with a one-line
+ * header, mono tabular figures, flat 1px rules, no shadows. The series is
+ * the theme's --chart-accent (electric blue) — history solid over a fading
+ * fill, projection dashed and lighter; Now, gridlines and axes stay neutral.
+ * ============================================================ */
+
+.panel {
+  --forecast-ink: var(--chart-accent);
+  --forecast-fill-top: color-mix(in srgb, var(--chart-accent) 22%, transparent);
+  --forecast-fill-bottom: color-mix(in srgb, var(--chart-accent) 0%, transparent);
+  --forecast-projected: color-mix(in srgb, var(--chart-accent) 72%, transparent);
+  --forecast-projected-fill: color-mix(in srgb, var(--chart-accent) 7%, transparent);
+  --forecast-bar: color-mix(in srgb, var(--chart-accent) 55%, transparent);
+
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+
+.panelOpen .head {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-secondary);
+  transform: rotate(-90deg);
+  transition: transform $transition-fast;
+}
+
+.chevronOpen {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+.headActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- headline ---------- */
+
+.headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 0;
+  min-width: 0;
+}
+
+.headlineValue {
+  font-family: $font-mono;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.headlineOf {
+  font-family: $font-mono;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.headlineRate {
+  font-family: $font-mono;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+/* ---------- controls ---------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  flex: none;
+}
+
+.segment {
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -1px;
+  }
+}
+
+.segmentMono {
+  font-family: $font-mono;
+}
+
+.segmentActive {
+  border-color: var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .segment:hover:not(.segmentActive) {
+    color: var(--text-primary);
+  }
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.swatchSolid,
+.swatchDashed {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top: 2px solid var(--forecast-ink);
+}
+
+.swatchDashed {
+  border-top-style: dashed;
+  border-top-color: var(--forecast-projected);
+}
+
+.select {
+  flex: none;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+/* ---------- chart ---------- */
+
+.chart {
+  --chart-height: 180px;
+
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+
+  @include mobile {
+    --chart-height: 150px;
+  }
+}
+
+.plot {
+  display: flex;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.yAxis {
+  position: relative;
+  width: 44px;
+  height: var(--chart-height);
+  flex: none;
+
+  @include mobile {
+    width: 36px;
+  }
+}
+
+.yTick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: var(--chart-height);
+  touch-action: pan-y;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.gridline {
+  stroke: var(--border-color);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.baseline {
+  stroke: var(--border-hover);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.historyArea {
+  fill: var(--forecast-fill-top);
+}
+
+.fillStopTop {
+  stop-color: var(--forecast-fill-top);
+}
+
+.fillStopBottom {
+  stop-color: var(--forecast-fill-bottom);
+}
+
+.historyLine {
+  fill: none;
+  stroke: var(--forecast-ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.projectedArea {
+  fill: var(--forecast-projected-fill);
+}
+
+.projectedLine {
+  fill: none;
+  stroke: var(--forecast-projected);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  stroke-linejoin: round;
+}
+
+.nowLine {
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+  stroke-linecap: round;
+}
+
+.nowLabel {
+  position: absolute;
+  top: -14px;
+  transform: translateX(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.crosshair {
+  stroke: var(--border-hover);
+  stroke-width: 1;
+}
+
+.hoverDot {
+  fill: var(--forecast-ink);
+  stroke: var(--bg-primary);
+  stroke-width: 2;
+}
+
+.bar {
+  fill: var(--forecast-bar);
+}
+
+.barActive {
+  fill: var(--forecast-ink);
+}
+
+.averageLine {
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.averageLabel {
+  position: absolute;
+  right: 0;
+  transform: translateY(-100%);
+  padding-bottom: 2px;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ---------- tooltip ---------- */
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  max-width: 280px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.tooltipTime {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tooltipTag {
+  margin-left: 6px;
+  font-family: inherit;
+  color: var(--text-tertiary);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+
+  > span {
+    min-width: 0;
+    @include text-ellipsis;
+  }
+
+  b {
+    margin-left: auto;
+    font-family: $font-mono;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+}
+
+.tooltipTotal {
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ---------- x axis ---------- */
+
+.xAxis {
+  position: relative;
+  height: 14px;
+  margin-left: 52px;
+
+  @include mobile {
+    margin-left: 44px;
+  }
+}
+
+.xTick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.xTickMinor {
+  @include mobile {
+    display: none;
+  }
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.nextReset {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.settings {
+  font-size: 12px;
+
+  summary {
+    width: fit-content;
+    padding: 2px 4px;
+    margin-left: -4px;
+    border-radius: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 1px;
+    }
+  }
+
+  &[open] summary {
+    margin-bottom: 8px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings summary:hover,
+  .toggle:hover .chevron {
+    color: var(--text-primary);
+  }
+}
+
+.settingRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--text-secondary);
+}
+
+/* ---------- empty / error ---------- */
+
+.empty {
+  margin: 0;
+  padding: 24px 0;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.error {
+  color: var(--danger-color);
+}

@@ -1,0 +1,135 @@
+@use '../../../styles/mixins' as *;
+
+.group {
+  /* Rows and the routing line switch to their narrow layout off this width. */
+  container-type: inline-size;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+
+.iconWrap {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.squares {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-width: 0;
+}
+
+.square {
+  width: 9px;
+  height: 9px;
+  border-radius: 2.5px;
+}
+
+.squareOk {
+  background: var(--viz-success);
+}
+
+.squareWarn {
+  background: var(--quota-medium-color);
+}
+
+.squareBad {
+  background: var(--viz-failure);
+}
+
+.squareIdle {
+  background: var(--border-hover);
+}
+
+.count {
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.next {
+  font-size: 12px;
+  color: var(--quota-medium-color);
+  white-space: nowrap;
+}
+
+.refresh {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refresh:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+}
+
+.spinning {
+  animation: quota-group-spin 0.9s linear infinite;
+}
+
+@keyframes quota-group-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}

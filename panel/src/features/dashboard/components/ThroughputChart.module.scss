@@ -1,0 +1,263 @@
+@use '../../../styles/mixins' as *;
+
+/* Static stacked bars: no entry animation, flat tooltip, small radii. */
+
+.chart {
+  --chart-height: 148px;
+  --bar-max-width: 22px;
+
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---------- plot ---------- */
+
+.plot {
+  display: flex;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.yAxis {
+  position: relative;
+  width: 36px;
+  height: var(--chart-height);
+  flex: none;
+
+  @include mobile {
+    width: 28px;
+  }
+}
+
+.yTick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: var(--chart-height);
+}
+
+.gridlines {
+  position: absolute;
+  inset: 0;
+}
+
+.gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-color);
+
+  &:last-child {
+    background: var(--border-hover);
+  }
+}
+
+/* ---------- bars ---------- */
+
+.columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.column {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.stack {
+  width: 100%;
+  max-width: var(--bar-max-width);
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+}
+
+.columnActive .stack {
+  opacity: 0.8;
+}
+
+.segment {
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.segmentSuccess {
+  background: var(--viz-success);
+}
+
+.segmentFailure {
+  background: var(--viz-failure);
+}
+
+.idleTick {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: var(--border-hover);
+}
+
+/* ---------- tooltip ---------- */
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 128px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.tooltipTime {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  b {
+    margin-left: auto;
+    font-family: $font-mono;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+}
+
+.tooltipRate {
+  font-family: $font-mono;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.swatchSuccess {
+  background: var(--viz-success);
+}
+
+.swatchFailure {
+  background: var(--viz-failure);
+}
+
+/* ---------- x axis ---------- */
+
+.xAxis {
+  position: relative;
+  height: 14px;
+  margin-left: 44px;
+
+  @include mobile {
+    margin-left: 36px;
+  }
+}
+
+.xTick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: $font-mono;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- data table ---------- */
+
+.tableToggle {
+  font-size: 12px;
+
+  summary {
+    width: fit-content;
+    padding: 2px 4px;
+    margin-left: -4px;
+    border-radius: 4px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 1px;
+    }
+  }
+
+  &[open] summary {
+    margin-bottom: 6px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tableToggle summary:hover {
+    color: var(--text-primary);
+  }
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: $font-mono;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+
+  th,
+  td {
+    padding: 4px 8px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+  }
+
+  thead th {
+    font-family: inherit;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  tbody th[scope='row'] {
+    text-align: left;
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+}

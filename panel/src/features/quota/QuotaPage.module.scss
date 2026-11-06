@@ -1,0 +1,98 @@
+@use '../../styles/mixins' as *;
+
+/* ============================================================
+ * 额度页壳层：纯布局，视觉细节都在各组件的 colocated 模块里。
+ * ============================================================ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ---------- 工作区（提供商分组 + 时间线） ---------- */
+
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.errorBanner {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger-color);
+  background: var(--bg-error-light);
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 提供商分组 ---------- */
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---------- 重置时间线（默认折叠） ---------- */
+
+.timelineSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timelineToggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-left: -10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .timelineToggle:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+}
+
+.timelineChevron {
+  transform: rotate(-90deg);
+  transition: transform $transition-fast;
+}
+
+.timelineChevronOpen {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timelineChevron {
+    transition: none;
+  }
+}
+
+@include mobile {
+  .page {
+    gap: 16px;
+  }
+}
